@@ -1,60 +1,705 @@
 <!DOCTYPE html>
-<html lang="vi">
-
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Parallax Scrolling Website</title>
-    <link rel="stylesheet" href="./style.css">
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Sudoku × Minesweeper — Modes + Custom Config</title>
+<style>
+  :root{
+    --bg:#0e0f14; --panel:#171922; --ink:#e8ecf2; --muted:#9aa8b8;
+    --tile:#1d2130; --tile2:#212536; --tile3:#252a3c;
+    --accent:#77c1ff; --ok:#52d49a; --warn:#ffbb6b; --danger:#ff6b6b; --clue:#7bd1ff;
+    --flag:#ff5e94; --bomb:#ff4b6e;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:linear-gradient(180deg,#0b0c12,#11131a); color:var(--ink);
+    font:14px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial;
+    display:flex; flex-direction:column; align-items:center; gap:16px; padding:18px
+  }
+  h1{margin:0; font-size:18px; color:var(--accent); letter-spacing:.3px}
+  .topbar{display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:12px; width:min(96vw,980px)}
+  .lives{display:flex; gap:6px; align-items:center}
+  .heart{width:16px; aspect-ratio:1; background:var(--danger); clip-path:path("M12 21s-8-4.438-8-11a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 6.562-8 11-8 11Z"); opacity:.18}
+  .heart.on{opacity:1}
+  .stats{justify-self:center; color:var(--muted); font-weight:600}
+  .controls{justify-self:end; display:flex; gap:8px; flex-wrap:wrap}
+  select,button{
+    background:var(--panel); color:var(--ink); border:1px solid #0008; border-radius:10px;
+    padding:8px 12px; font-weight:700; letter-spacing:.2px; cursor:pointer;
+    box-shadow:inset 0 0 0 1px #ffffff0a, 0 1px 0 #000a;
+  }
+  button:hover{filter:brightness(1.06)} button:active{transform:translateY(1px)}
+  .layout{display:grid; grid-template-columns: minmax(300px,650px) minmax(220px, 310px); gap:14px; width:min(96vw,980px)}
+  .board{
+    width:100%; aspect-ratio:1;
+    display:grid; grid-template-columns:repeat(9,1fr); grid-template-rows:repeat(9,1fr);
+    gap:2px; background:#0008; padding:2px; border-radius:14px; box-shadow:0 6px 30px #0008;
+  }
+  .cell{
+    position:relative; display:flex; align-items:center; justify-content:center;
+    background:var(--tile); border-radius:8px; user-select:none; -webkit-tap-highlight-color:transparent;
+    font-size:clamp(16px, 3.0vw, 26px); font-weight:900; color:#e9effa;
+    transition:.08s background, .08s transform;
+  }
+  .cell.covered{background:var(--tile2); cursor:pointer}
+  .cell.flag::before{content:"⚑"; position:absolute; left:6px; top:5px; color:var(--flag); font-size:14px}
+  .cell.revealed{background:var(--tile3)}
+  .cell.normal.revealed{outline:1px solid #0006}
+  .cell.clue.revealed{outline:2px solid #3a7aa6aa; box-shadow:inset 0 0 0 1px #6fc8ff33}
+  .badge{
+    position:absolute; right:6px; top:6px; font-size:12px; font-weight:800;
+    color:#dff2ff; background:#0b1a26; padding:2px 6px; border-radius:999px;
+    border:1px solid #64a8ff40; display:none;
+  }
+  .cell.clue .badge{display:block}
+  .cell.bomb.revealed{background:linear-gradient(180deg,#311a22,#2a1a1f); outline:2px solid #ff4b6e80}
+  .bombmark{position:absolute; font-size:20px}
+  .cell.given{box-shadow:inset 0 0 0 2px #ffffff08; background:linear-gradient(180deg,#2b3044,#23283b)}
+  .subgrid{position:absolute; inset:-2px; border-radius:10px; pointer-events:none; outline:2px solid #ffffff08; box-shadow:inset 0 0 0 2px #0004}
+  .panel{
+    background:var(--panel); border-radius:12px; padding:12px; box-shadow:0 6px 24px #0008; align-self:start;
+  }
+  .panel h3{margin:0 0 8px; font-size:14px; color:var(--muted)}
+  .numpad{display:grid; grid-template-columns:repeat(3,1fr); gap:6px}
+  .numpad button{padding:10px 0; font-size:16px; font-weight:900}
+  .sel{outline:2px solid var(--accent)}
+  .row{display:flex; gap:8px; margin-top:8px; align-items:center}
+  .confirm{background:linear-gradient(180deg,#2b7,#194); border-color:#0a2}
+  .bad{animation:shake .2s linear}
+  @keyframes shake{0%{transform:translateX(0)}25%{transform:translateX(-2px)}50%{transform:translateX(2px)}75%{transform:translateX(-1px)}100%{transform:translateX(0)}}
+  .status{color:var(--muted); font-weight:700; width:min(96vw,980px)}
+  .win{color:var(--ok)} .lose{color:var(--danger)} .hint{color:var(--clue)}
+
+  /* Config panel */
+  details.config { background:var(--panel); border-radius:12px; padding:10px 12px; box-shadow:0 6px 24px #0008; width:min(96vw,980px) }
+  details.config > summary { cursor:pointer; outline:none; list-style:none; font-weight:800; color:var(--accent) }
+  .cfggrid { display:grid; gap:10px; grid-template-columns: repeat(auto-fill,minmax(240px,1fr)); margin-top:10px }
+  .cfgitem { background:#141822; border:1px solid #0008; border-radius:10px; padding:10px; }
+  .cfgitem h4 { margin:0 0 6px; font-size:13px; color:var(--muted) }
+  .cfgitem input[type="range"]{ width:100% }
+  .cfgitem .val { font-weight:800 }
+  .switch { display:flex; gap:8px; align-items:center }
+  .kv { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size:12px; color:#cfe; background:#0d1220; padding:8px; border-radius:8px; white-space:pre-wrap; border:1px solid #0008 }
+  .inlineHelp { color:var(--muted); font-size:12px; margin-top:6px }
+</style>
 </head>
-
 <body>
-    <header>
-        <a href="#" class="logo">LOGO</a>
-        <ul>
-            <li><a href="#" class="active">Home</a></li>
-            <li><a href="#">About</a></li>
-            <li><a href="#">Work</a></li>
-            <li><a href="#">Contact</a></li>
-        </ul>
-    </header>
-
-    <section>
-        <img src="./stars.png" id="stars">
-        <img src="./moon.png" id="moon">
-        <img src="./mountains_behind.png" id="mountains_behind">
-        <h2 id="text">Moon Light</h2>
-        <a href="#sec" id="btn">Explore</a>
-        <img src="./mountains_front.png" id="mountains_front">
-    </section>
-
-    <div id="sec">
-        <h2>Parallax Scrolling Effects</h2>
-        <p>Lorem ipsum dolor sit amet, consectetur adipisicing elit. Nam asperiores aperiam ratione, consequatur
-            voluptas aliquam. Repellat architecto optio ex blanditiis corporis, dolor minima vel fugit sit accusantium
-            quam animi ducimus? Lorem ipsum dolor sit, amet consectetur adipisicing elit. Autem quaerat eius adipisci
-            doloremque culpa perspiciatis, asperiores repudiandae quae voluptates sit, deleniti ullam minus eaque
-            sapiente reiciendis harum dicta amet repellendus. Lorem ipsum dolor sit amet consectetur adipisicing elit.
-            Possimus unde assumenda quaerat repellendus, error, atque consequatur magnam ad molestias vitae, alias
-            omnis. Totam culpa quo, vitae voluptas corrupti aspernatur dolores!<br><br>Lorem ipsum dolor sit amet,
-            consectetur adipisicing elit. Nam asperiores aperiam ratione, consequatur
-            voluptas aliquam. Repellat architecto optio ex blanditiis corporis, dolor minima vel fugit sit accusantium
-            quam animi ducimus? Lorem ipsum dolor sit, amet consectetur adipisicing elit. Autem quaerat eius adipisci
-            doloremque culpa perspiciatis, asperiores repudiandae quae voluptates sit, deleniti ullam minus eaque
-            sapiente reiciendis harum dicta amet repellendus. Lorem ipsum dolor sit amet consectetur adipisicing elit.
-            Possimus unde assumenda quaerat repellendus, error, atque consequatur magnam ad molestias vitae, alias
-            omnis. Totam culpa quo, vitae voluptas corrupti aspernatur dolores!<br><br>Lorem ipsum dolor sit amet,
-            consectetur adipisicing elit. Nam asperiores aperiam ratione, consequatur
-            voluptas aliquam. Repellat architecto optio ex blanditiis corporis, dolor minima vel fugit sit accusantium
-            quam animi ducimus? Lorem ipsum dolor sit, amet consectetur adipisicing elit. Autem quaerat eius adipisci
-            doloremque culpa perspiciatis, asperiores repudiandae quae voluptates sit, deleniti ullam minus eaque
-            sapiente reiciendis harum dicta amet repellendus. Lorem ipsum dolor sit amet consectetur adipisicing elit.
-            Possimus unde assumenda quaerat repellendus, error, atque consequatur magnam ad molestias vitae, alias
-            omnis. Totam culpa quo, vitae voluptas corrupti aspernatur dolores!</p>
+  <div class="topbar">
+    <div class="lives" id="lives"></div>
+    <div class="stats">Bombs: <b id="bombsLeft">--</b> • Flags: <b id="flagsCnt">0</b></div>
+    <div class="controls">
+      <select id="mode" title="Mode">
+        <option value="story" selected>Story</option>
+        <option value="normal">Normal</option>
+        <option value="hard">Hard</option>
+        <option value="custom">Custom…</option>
+      </select>
+      <button id="newRun">New Run</button>
     </div>
+  </div>
 
-    <script src="./script.js"></script>
+  <div class="layout">
+    <div id="board" class="board" role="grid" aria-label="Runic Sudoku board"></div>
+
+    <aside class="panel" style="width:100%;max-width:310px">
+      <h3>Number</h3>
+      <div class="numpad" id="numpad"></div>
+      <div class="row">
+        <button id="confirm" class="confirm" title="Confirm number on selected tile">Confirm</button>
+        <button id="flagBtn" title="Toggle flag on selected tile">⚑ Flag</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <small id="asideHint" class="hint">Anchored district starts with safe reveals (clue-biased). Build logic from there.</small>
+      </div>
+      <div class="row" style="margin-top:12px;flex-direction:column;align-items:stretch">
+        <h3>Active Config</h3>
+        <div id="activeConfig" class="kv"></div>
+      </div>
+    </aside>
+  </div>
+
+  <details class="config" id="configPanel">
+    <summary>⚙️ Configure Mode (Custom unlocks inputs)</summary>
+    <div class="cfggrid">
+      <div class="cfgitem">
+        <h4>Lives: <span class="val" id="valLives">3</span></h4>
+        <input type="range" id="cfgLives" min="1" max="7" step="1" value="3"/>
+      </div>
+      <div class="cfgitem">
+        <h4>Bomb Ratio: <span class="val" id="valBombRatio">0.15</span></h4>
+        <input type="range" id="cfgBombRatio" min="0.08" max="0.30" step="0.01" value="0.15"/>
+        <div class="inlineHelp">% of cells that are bombs (0.15 ≈ 12–15 bombs).</div>
+      </div>
+      <div class="cfgitem">
+        <h4>Anchors in District: <span class="val" id="valAnchors">6</span></h4>
+        <input type="range" id="cfgAnchors" min="3" max="8" step="1" value="6"/>
+        <div class="inlineHelp">How many safe tiles are revealed in the anchored 3×3 block (clue-biased).</div>
+      </div>
+      <div class="cfgitem">
+        <h4>Start Clues Target: <span class="val" id="valStartClues">14</span></h4>
+        <input type="range" id="cfgStartClues" min="6" max="30" step="1" value="14"/>
+        <div class="inlineHelp">Minimum count of clue tiles shown at start.</div>
+      </div>
+      <div class="cfgitem">
+        <h4>Start Givens (Total): <span class="val" id="valStartGivens">30</span></h4>
+        <input type="range" id="cfgStartGivens" min="10" max="50" step="1" value="30"/>
+        <div class="inlineHelp">Total tiles revealed at start (includes clues & normals; bombs are never auto-revealed).</div>
+      </div>
+      <div class="cfgitem">
+        <h4>Max Adj for Start: <span class="val" id="valMaxAdj">4</span></h4>
+        <input type="range" id="cfgMaxAdj" min="0" max="8" step="1" value="4"/>
+        <div class="inlineHelp">Bias to pick clues with ≤ this many adjacent bombs (lower = easier logic).</div>
+      </div>
+      <div class="cfgitem switch">
+        <input type="checkbox" id="cfgSpreadRows" checked/>
+        <label for="cfgSpreadRows">Spread by Rows (ensure most rows have a start anchor)</label>
+      </div>
+      <div class="cfgitem switch">
+        <input type="checkbox" id="cfgSpreadBlocks" checked/>
+        <label for="cfgSpreadBlocks">Spread by Blocks (ensure most 3×3 blocks have a start anchor)</label>
+      </div>
+      <div class="cfgitem">
+        <button id="saveCustom">💾 Save Custom</button>
+        <button id="resetCustom">↺ Reset Custom</button>
+      </div>
+    </div>
+  </details>
+
+  <div id="status" class="status">Rules: Pick a covered tile → choose a number → Confirm. If it’s a bomb: instant loss. If wrong digit: lose 1 life. Flag all bombs & fill all safe tiles to win.</div>
+
+<script>
+(() => {
+  // ========= Modes & Defaults =========
+  const SIDE=9, BASE=3;
+
+  // Preset configs per mode:
+  const PRESETS = {
+    story:  { lives:3, bombRatio:0.15, anchors:6, targetStartClues:16, targetStartGivens:34, maxAdjStart:3, spreadRows:true, spreadBlocks:true },
+    normal: { lives:3, bombRatio:0.18, anchors:5, targetStartClues:14, targetStartGivens:30, maxAdjStart:4, spreadRows:true, spreadBlocks:true },
+    hard:   { lives:5, bombRatio:0.22, anchors:5, targetStartClues:10, targetStartGivens:26, maxAdjStart:5, spreadRows:true, spreadBlocks:true },
+    custom: { lives:3, bombRatio:0.15, anchors:6, targetStartClues:14, targetStartGivens:30, maxAdjStart:4, spreadRows:true, spreadBlocks:true }
+  };
+
+  // LocalStorage keys
+  const LS_KEY = "runic-custom-config-v1";
+
+  // ========= State =========
+  let mode = "story";
+  let solution=[], bombs=[], adj=[], revealed=[], flagged=[], given=[];
+  let lives=3, bombsTotal=0, bombsLeft=0, flagsCount=0;
+  let selected=null, pickedDigit=null, gameOver=false;
+  let lastAnchorInfo = { br:0, bc:0, anchorsPlaced:0 };
+
+  // ========= DOM =========
+  const boardEl = document.getElementById('board');
+  const livesEl = document.getElementById('lives');
+  const bombsLeftEl = document.getElementById('bombsLeft');
+  const flagsCntEl = document.getElementById('flagsCnt');
+  const statusEl = document.getElementById('status');
+  const modeEl = document.getElementById('mode');
+  const newRunBtn = document.getElementById('newRun');
+  const numpadEl = document.getElementById('numpad');
+  const confirmBtn = document.getElementById('confirm');
+  const flagBtn = document.getElementById('flagBtn');
+  const asideHint = document.getElementById('asideHint');
+  const activeConfigEl = document.getElementById('activeConfig');
+
+  // Config inputs
+  const cfgLives = document.getElementById('cfgLives');
+  const cfgBombRatio = document.getElementById('cfgBombRatio');
+  const cfgAnchors = document.getElementById('cfgAnchors');
+  const cfgStartClues = document.getElementById('cfgStartClues');
+  const cfgStartGivens = document.getElementById('cfgStartGivens');
+  const cfgMaxAdj = document.getElementById('cfgMaxAdj');
+  const cfgSpreadRows = document.getElementById('cfgSpreadRows');
+  const cfgSpreadBlocks = document.getElementById('cfgSpreadBlocks');
+
+  const valLives = document.getElementById('valLives');
+  const valBombRatio = document.getElementById('valBombRatio');
+  const valAnchors = document.getElementById('valAnchors');
+  const valStartClues = document.getElementById('valStartClues');
+  const valStartGivens = document.getElementById('valStartGivens');
+  const valMaxAdj = document.getElementById('valMaxAdj');
+
+  const saveCustomBtn = document.getElementById('saveCustom');
+  const resetCustomBtn = document.getElementById('resetCustom');
+  const configPanel = document.getElementById('configPanel');
+
+  // prevent context menu
+  window.addEventListener('contextmenu', e => e.preventDefault(), {passive:false});
+
+  // ========= Utils =========
+  const inBounds=(r,c)=> r>=0&&r<SIDE&&c>=0&&c<SIDE;
+  const neighbors8=(r,c)=>{const res=[];for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){if(!dr&&!dc)continue;const rr=r+dr,cc=c+dc;if(inBounds(rr,cc))res.push([rr,cc]);}return res;};
+  const randInt=n=>Math.floor(Math.random()*n);
+  const shuffle=a=>{for(let i=a.length-1;i>0;i--){const j=randInt(i+1);[a[i],a[j]]=[a[j],a[i]];}return a;};
+
+  // ========= Sudoku & Board Generators =========
+  function generateSudokuSolved(){
+    const pattern=(r,c)=>(BASE*(r%BASE)+Math.floor(r/BASE)+c)%SIDE;
+    const rBase=[0,1,2];
+    const rows=[].concat(...shuffle([0,1,2]).map(g=>shuffle(rBase).map(r=>g*BASE+r)));
+    const cols=[].concat(...shuffle([0,1,2]).map(g=>shuffle(rBase).map(c=>g*BASE+c)));
+    const nums=shuffle([1,2,3,4,5,6,7,8,9]);
+    const g=Array.from({length:SIDE},_=>Array(SIDE).fill(0));
+    for(let r=0;r<SIDE;r++)for(let c=0;c<SIDE;c++)g[rows[r]][cols[c]]=nums[pattern(r,c)];
+    return g;
+  }
+  function placeBombs(ratio){
+    const total=SIDE*SIDE, target=Math.max(1,Math.floor(total*ratio));
+    const b=Array.from({length:SIDE},_=>Array(SIDE).fill(false));
+    const pool=[]; for(let r=0;r<SIDE;r++)for(let c=0;c<SIDE;c++) pool.push([r,c]);
+    shuffle(pool);
+    for(let i=0;i<target;i++){ const [r,c]=pool[i]; b[r][c]=true; }
+    return {b,count:target};
+  }
+  function computeAdj(b){
+    const A=Array.from({length:SIDE},_=>Array(SIDE).fill(0));
+    for(let r=0;r<SIDE;r++)for(let c=0;c<SIDE;c++)
+      A[r][c]=neighbors8(r,c).reduce((acc,[rr,cc])=>acc+(b[rr][cc]?1:0),0);
+    return A;
+  }
+  function tileType(r,c){
+    if(bombs[r][c]) return "bomb";
+    return (solution[r][c]===adj[r][c]) ? "clue" : "normal";
+  }
+
+  // pick anchored 3x3 with low avg adjacency
+  function pickAnchoredBlock(){
+    const blocks=[];
+    for(let br=0;br<3;br++)for(let bc=0;bc<3;bc++){
+      let sumAdj=0, count=0, safeCount=0;
+      for(let r=br*3;r<br*3+3;r++)
+        for(let c=bc*3;c<bc*3+3;c++){
+          sumAdj += adj[r][c]; count++;
+          if(!bombs[r][c]) safeCount++;
+        }
+      const avgAdj = sumAdj / count;
+      blocks.push({br,bc,avgAdj,safeCount});
+    }
+    blocks.sort((a,b)=> (a.avgAdj - b.avgAdj) || (b.safeCount - a.safeCount));
+    const candidates = blocks.slice(0, Math.min(3, blocks.length));
+    return candidates[randInt(candidates.length)];
+  }
+
+  // choose givens with anchored district + spread + low-adj bias
+  function chooseGivensAnchored(conf){
+    const { anchors, targetStartClues, targetStartGivens, maxAdjStart, spreadRows, spreadBlocks } = conf;
+    const g=Array.from({length:SIDE},_=>Array(SIDE).fill(false));
+
+    const clues=[], normals=[];
+    for(let r=0;r<SIDE;r++)for(let c=0;c<SIDE;c++){
+      if(!bombs[r][c] && solution[r][c]===adj[r][c]) clues.push([r,c]);
+      else if(!bombs[r][c]) normals.push([r,c]);
+    }
+    clues.sort((a,b)=>adj[a[0]][a[1]]-adj[b[0]][b[1]]);
+    shuffle(normals);
+
+    const rowsCovered=new Set(), blocksCovered=new Set();
+    const markSets=([r,c])=>{
+      rowsCovered.add(r);
+      blocksCovered.add(`${Math.floor(r/3)}-${Math.floor(c/3)}`);
+    };
+
+    let revealedCount=0, clueCount=0;
+
+    const { br, bc } = pickAnchoredBlock();
+    let anchorsPlaced = 0;
+
+    // anchors: clues first (low-adj)
+    for(const [r,c] of clues){
+      if(anchorsPlaced>=anchors) break;
+      if(Math.floor(r/3)===br && Math.floor(c/3)===bc && adj[r][c] <= maxAdjStart){
+        g[r][c]=true; revealedCount++; clueCount++; anchorsPlaced++; markSets([r,c]);
+      }
+    }
+    // anchors: normals if needed
+    for(const [r,c] of normals){
+      if(anchorsPlaced>=anchors) break;
+      if(Math.floor(r/3)===br && Math.floor(c/3)===bc && !g[r][c]){
+        g[r][c]=true; revealedCount++; anchorsPlaced++; markSets([r,c]);
+      }
+    }
+
+    // spread clues
+    for(const [r,c] of clues){
+      if(revealedCount>=targetStartGivens || clueCount>=targetStartClues) break;
+      const blockKey=`${Math.floor(r/3)}-${Math.floor(c/3)}`;
+      const wantRow = spreadRows && !rowsCovered.has(r);
+      const wantBlock = spreadBlocks && !blocksCovered.has(blockKey);
+      const lowAdj = adj[r][c] <= maxAdjStart;
+      if((wantRow||wantBlock||lowAdj) && !g[r][c]){
+        g[r][c]=true; revealedCount++; clueCount++; markSets([r,c]);
+      }
+    }
+
+    // more low-adj clues if room
+    for(const [r,c] of clues){
+      if(revealedCount>=targetStartGivens || clueCount>=targetStartClues) break;
+      if(!g[r][c] && adj[r][c] <= maxAdjStart){
+        g[r][c]=true; revealedCount++; clueCount++; markSets([r,c]);
+      }
+    }
+
+    // fill with normals near low-adj zones
+    for(const [r,c] of normals){
+      if(revealedCount>=targetStartGivens) break;
+      if(!g[r][c] && adj[r][c] <= maxAdjStart){
+        g[r][c]=true; revealedCount++; markSets([r,c]);
+      }
+    }
+
+    return { g, anchorBlock:{br,bc,anchorsPlaced} };
+  }
+
+  // ========= Mode/Config Helpers =========
+  function loadCustomFromLS(){
+    try{
+      const raw = localStorage.getItem(LS_KEY);
+      if(!raw) return;
+      const cfg = JSON.parse(raw);
+      PRESETS.custom = Object.assign({}, PRESETS.custom, cfg);
+    }catch{}
+  }
+  function saveCustomToLS(){
+    localStorage.setItem(LS_KEY, JSON.stringify(PRESETS.custom));
+  }
+
+  function getActiveConfig(){
+    // return config for current mode
+    return Object.assign({}, PRESETS[mode]);
+  }
+
+  function applyConfigInputsEnabled(){
+    const enable = (mode === "custom");
+    [
+      cfgLives, cfgBombRatio, cfgAnchors,
+      cfgStartClues, cfgStartGivens, cfgMaxAdj,
+      cfgSpreadRows, cfgSpreadBlocks
+    ].forEach(el => el.disabled = !enable);
+    if(enable){ configPanel.open = true; }
+  }
+
+  function syncInputsFromConfig(cfg){
+    cfgLives.value = cfg.lives;
+    valLives.textContent = cfg.lives;
+
+    cfgBombRatio.value = cfg.bombRatio;
+    valBombRatio.textContent = Number(cfg.bombRatio).toFixed(2);
+
+    cfgAnchors.value = cfg.anchors;
+    valAnchors.textContent = cfg.anchors;
+
+    cfgStartClues.value = cfg.targetStartClues;
+    valStartClues.textContent = cfg.targetStartClues;
+
+    cfgStartGivens.value = cfg.targetStartGivens;
+    valStartGivens.textContent = cfg.targetStartGivens;
+
+    cfgMaxAdj.value = cfg.maxAdjStart;
+    valMaxAdj.textContent = cfg.maxAdjStart;
+
+    cfgSpreadRows.checked = !!cfg.spreadRows;
+    cfgSpreadBlocks.checked = !!cfg.spreadBlocks;
+  }
+
+  function syncConfigFromInputs(){
+    PRESETS.custom = {
+      lives: parseInt(cfgLives.value,10),
+      bombRatio: +cfgBombRatio.value,
+      anchors: parseInt(cfgAnchors.value,10),
+      targetStartClues: parseInt(cfgStartClues.value,10),
+      targetStartGivens: parseInt(cfgStartGivens.value,10),
+      maxAdjStart: parseInt(cfgMaxAdj.value,10),
+      spreadRows: !!cfgSpreadRows.checked,
+      spreadBlocks: !!cfgSpreadBlocks.checked
+    };
+    saveCustomToLS();
+    renderActiveConfigKV();
+  }
+
+  function renderActiveConfigKV(){
+    const cfg = getActiveConfig();
+    activeConfigEl.textContent =
+`mode: ${mode}
+lives: ${cfg.lives}
+bombRatio: ${cfg.bombRatio}
+anchorsInAnchoredDistrict: ${cfg.anchors}
+targetStartClues: ${cfg.targetStartClues}
+targetStartGivens: ${cfg.targetStartGivens}
+maxAdjForStart: ${cfg.maxAdjStart}
+spreadByRows: ${cfg.spreadRows}
+spreadByBlocks: ${cfg.spreadBlocks}
+anchoredBlock(last run): [${lastAnchorInfo.br+1}, ${lastAnchorInfo.bc+1}] placed=${lastAnchorInfo.anchorsPlaced}`;
+  }
+
+  // ========= Game Flow =========
+  function newRun(){
+    gameOver=false; selected=null; pickedDigit=null; flagsCount=0;
+
+    const cfg = getActiveConfig();
+    lives = cfg.lives;
+
+    solution=generateSudokuSolved();
+    const bp=placeBombs(cfg.bombRatio);
+    bombs=bp.b; bombsTotal=bp.count; bombsLeft=bombsTotal;
+    adj=computeAdj(bombs);
+
+    revealed=Array.from({length:SIDE},_=>Array(SIDE).fill(false));
+    flagged =Array.from({length:SIDE},_=>Array(SIDE).fill(false));
+
+    const result = chooseGivensAnchored(cfg);
+    given = result.g;
+    lastAnchorInfo = result.anchorBlock;
+
+    // reveal givens (safe only)
+    for(let r=0;r<SIDE;r++)for(let c=0;c<SIDE;c++){
+      if(given[r][c]) revealed[r][c]=true;
+    }
+
+    renderLives();
+    renderBoard();
+    updateStats();
+    renderActiveConfigKV();
+    setStatus(`Anchored district [${lastAnchorInfo.br+1},${lastAnchorInfo.bc+1}] with ${lastAnchorInfo.anchorsPlaced} safe reveals. Good luck!`);
+    buildNumpad();
+  }
+
+  function renderLives(){
+    livesEl.innerHTML="";
+    const maxL = getActiveConfig().lives;
+    for(let i=0;i<maxL;i++){
+      const h=document.createElement('div');
+      h.className="heart"+(i<lives?" on":"");
+      livesEl.appendChild(h);
+    }
+  }
+
+  function setStatus(msg, cls){ statusEl.className="status "+(cls||""); statusEl.textContent=msg; }
+
+  function updateStats(){
+    const notFlagged = bombsLeft - countCorrectFlags();
+    bombsLeftEl.textContent=String(Math.max(0,notFlagged));
+    flagsCntEl.textContent=String(flagsCount);
+  }
+
+  function countCorrectFlags(){
+    let ok=0;
+    for(let r=0;r<SIDE;r++)for(let c=0;c<SIDE;c++)
+      if(bombs[r][c] && flagged[r][c]) ok++;
+    return ok;
+  }
+
+  function isWin(){
+    for(let r=0;r<SIDE;r++)for(let c=0;c<SIDE;c++){
+      if(bombs[r][c] && !flagged[r][c]) return false;
+      if(!bombs[r][c] && !revealed[r][c]) return false;
+    }
+    return true;
+  }
+
+  function loseLife(){
+    lives--; renderLives();
+    if(lives<=0) endGame(false,"No lives left.");
+  }
+
+  function endGame(win,msg){
+    gameOver=true;
+    if(win){ setStatus("You win! "+(msg||""),"win"); }
+    else{
+      for(let r=0;r<SIDE;r++)for(let c=0;c<SIDE;c++) if(bombs[r][c]) revealed[r][c]=true;
+      renderBoard();
+      setStatus("You lose! "+(msg||""),"lose");
+    }
+  }
+
+  // ========= Render =========
+  function renderBoard(){
+    boardEl.innerHTML="";
+    for(let r=0;r<SIDE;r++)for(let c=0;c<SIDE;c++){
+      const div=document.createElement('div');
+      div.className="cell"; div.dataset.r=r; div.dataset.c=c;
+      if(r%3===0 && c%3===0){ const sg=document.createElement('div'); sg.className='subgrid'; div.appendChild(sg); }
+      const isRev=revealed[r][c], isFlag=flagged[r][c], type=tileType(r,c);
+      if(isRev){
+        div.classList.add("revealed",type);
+        if(type==="bomb"){
+          const m=document.createElement('div'); m.className="bombmark"; m.textContent="💣"; div.appendChild(m);
+        }else{
+          div.textContent=solution[r][c];
+          if(type==="clue"){
+            const b=document.createElement('div'); b.className="badge"; b.textContent=adj[r][c]; div.appendChild(b);
+          }
+          if(given[r][c]) div.classList.add("given");
+        }
+      }else{
+        div.classList.add("covered"); if(isFlag) div.classList.add("flag");
+      }
+      div.addEventListener('mousedown', onMouseDownCell);
+      div.addEventListener('touchstart', onTouchCell, {passive:false});
+      boardEl.appendChild(div);
+    }
+    highlightSelected();
+  }
+
+  function renderCell(r,c){
+    const idx=r*SIDE+c, div=boardEl.children[idx]; if(!div) return;
+    div.className="cell"; div.dataset.r=r; div.dataset.c=c;
+    if(r%3===0 && c%3===0){ const sg=document.createElement('div'); sg.className='subgrid'; div.appendChild(sg); }
+    const isRev=revealed[r][c], isFlag=flagged[r][c], type=tileType(r,c);
+    if(isRev){
+      div.classList.add("revealed",type);
+      if(type==="bomb"){
+        const m=document.createElement('div'); m.className="bombmark"; m.textContent="💣"; div.appendChild(m);
+      }else{
+        div.textContent=solution[r][c];
+        if(type==="clue"){ const b=document.createElement('div'); b.className='badge'; b.textContent=adj[r][c]; div.appendChild(b); }
+        if(given[r][c]) div.classList.add("given");
+      }
+    }else{
+      div.classList.add("covered"); if(isFlag) div.classList.add("flag");
+    }
+  }
+
+  // ========= Selection / Input =========
+  function setSelected(r,c){ if(gameOver) return; selected={r,c}; highlightSelected(); asideHint.textContent="Choose a number 1–9, then Confirm."; }
+  function clearSelected(){ selected=null; highlightSelected(); }
+  function highlightSelected(){
+    for(const ch of boardEl.children) ch.classList.remove('sel');
+    if(!selected) return; const idx=selected.r*SIDE+selected.c; const div=boardEl.children[idx]; if(div) div.classList.add('sel');
+  }
+
+  function buildNumpad(){
+    numpadEl.innerHTML="";
+    for(let n=1;n<=9;n++){
+      const b=document.createElement('button'); b.textContent=n;
+      b.addEventListener('click',()=>{
+        pickedDigit=n;
+        for(const btn of numpadEl.children) btn.classList.remove('sel');
+        b.classList.add('sel');
+      });
+      numpadEl.appendChild(b);
+    }
+  }
+
+  confirmBtn.addEventListener('click', ()=>{
+    if(gameOver) return;
+    if(!selected){ setStatus("Select a covered tile first.","lose"); return; }
+    const {r,c}=selected;
+    if(revealed[r][c]){ setStatus("Tile already revealed.","lose"); bumpCell(r,c); return; }
+    if(flagged[r][c]) { setStatus("Remove flag first if you want to reveal.","lose"); bumpCell(r,c); return; }
+    if(!pickedDigit){ setStatus("Pick a number 1–9, then Confirm.","lose"); bumpCell(r,c); return; }
+
+    if(bombs[r][c]){ endGame(false,"You revealed a bomb."); return; }
+
+    if(pickedDigit!==solution[r][c]){ loseLife(); if(!gameOver) setStatus(`Wrong digit. Life -1.`,"lose"); return; }
+
+    revealed[r][c]=true; renderCell(r,c);
+    if(isWin()) endGame(true,"All bombs flagged & safe tiles revealed!");
+    else setStatus("Nice! Keep chaining logic from the anchors.");
+  });
+
+  flagBtn.addEventListener('click', ()=>{
+    if(gameOver) return;
+    if(!selected){ setStatus("Select a covered tile first.","lose"); return; }
+    const {r,c}=selected;
+    if(revealed[r][c]){ setStatus("Cannot flag a revealed tile.","lose"); bumpCell(r,c); return; }
+    flagged[r][c]=!flagged[r][c];
+    flagsCount += flagged[r][c]?1:-1;
+    renderCell(r,c); updateStats();
+    if(isWin()) endGame(true,"All bombs flagged & safe tiles revealed!");
+  });
+
+  function onMouseDownCell(e){
+    const t=e.currentTarget; const r=+t.dataset.r, c=+t.dataset.c;
+    if(Number.isNaN(r)||Number.isNaN(c)) return;
+    if(e.button===2){
+      e.preventDefault();
+      if(revealed[r][c]){ setStatus("Cannot flag a revealed tile.","lose"); bumpCell(r,c); return; }
+      flagged[r][c]=!flagged[r][c]; flagsCount += flagged[r][c]?1:-1;
+      renderCell(r,c); updateStats();
+      if(isWin()) endGame(true,"All bombs flagged & safe tiles revealed!");
+      return;
+    }
+    if(!revealed[r][c]) setSelected(r,c); else clearSelected();
+  }
+
+  // long-press flag on touch
+  let touchTimer=null;
+  function onTouchCell(e){
+    e.preventDefault();
+    const t=e.currentTarget; const r=+t.dataset.r, c=+t.dataset.c;
+    if(Number.isNaN(r)||Number.isNaN(c)) return;
+    touchTimer=setTimeout(()=>{ // flag
+      if(revealed[r][c]){ setStatus("Cannot flag a revealed tile.","lose"); bumpCell(r,c); return; }
+      flagged[r][c]=!flagged[r][c]; flagsCount += flagged[r][c]?1:-1;
+      renderCell(r,c); updateStats();
+      if(isWin()) endGame(true,"All bombs flagged & safe tiles revealed!");
+      touchTimer=null;
+    },420);
+    const end=()=>{
+      if(touchTimer){ clearTimeout(touchTimer); touchTimer=null;
+        if(!revealed[r][c]) setSelected(r,c); else clearSelected();
+      }
+      window.removeEventListener('touchend',end);
+      window.removeEventListener('touchcancel',end);
+    };
+    window.addEventListener('touchend',end,{once:true});
+    window.addEventListener('touchcancel',end,{once:true});
+  }
+
+  function bumpCell(r,c){
+    const idx=r*SIDE+c, el=boardEl.children[idx]; if(!el) return;
+    el.classList.add('bad'); setTimeout(()=>el.classList.remove('bad'),200);
+  }
+
+  // ========= Mode & Config Wiring =========
+  function updateConfigInputsUI(){
+    const cfg = getActiveConfig();
+    syncInputsFromConfig(cfg);
+    applyConfigInputsEnabled();
+    renderActiveConfigKV();
+  }
+
+  modeEl.addEventListener('change', ()=>{
+    mode = modeEl.value;
+    updateConfigInputsUI();
+  });
+
+  // live update labels
+  [
+    [cfgLives, valLives, v=>v],
+    [cfgBombRatio, valBombRatio, v=>(+v).toFixed(2)],
+    [cfgAnchors, valAnchors, v=>v],
+    [cfgStartClues, valStartClues, v=>v],
+    [cfgStartGivens, valStartGivens, v=>v],
+    [cfgMaxAdj, valMaxAdj, v=>v],
+  ].forEach(([input, label, fmt])=>{
+    input.addEventListener('input', ()=>{
+      label.textContent = fmt(input.value);
+      if(mode==="custom"){ syncConfigFromInputs(); }
+    });
+  });
+  cfgSpreadRows.addEventListener('change', ()=>{ if(mode==="custom"){ syncConfigFromInputs(); }});
+  cfgSpreadBlocks.addEventListener('change', ()=>{ if(mode==="custom"){ syncConfigFromInputs(); }});
+
+  saveCustomBtn.addEventListener('click', ()=>{ syncConfigFromInputs(); setStatus("Custom config saved. New Run to apply.", "win"); });
+  resetCustomBtn.addEventListener('click', ()=>{
+    PRESETS.custom = { ...PRESETS.story }; // reset to story-ish base
+    syncInputsFromConfig(PRESETS.custom);
+    saveCustomToLS();
+    renderActiveConfigKV();
+    setStatus("Custom config reset to defaults.", "hint");
+  });
+
+  newRunBtn.addEventListener('click', newRun);
+
+  // ========= Init =========
+  loadCustomFromLS();
+  updateConfigInputsUI();
+  newRun();
+})();
+</script>
 </body>
-
 </html>
