@@ -1,1258 +1,2238 @@
 <!DOCTYPE html>
 <html lang="en">
-
-<head>
+  <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Sudoku × Minesweeper — Clue UI + Guide</title>
     <style>
-        :root {
-            --bg: #0e0f14;
-            --panel: #171922;
-            --ink: #e8ecf2;
-            --muted: #9aa8b8;
-            --tile: #1d2130;
-            --tile2: #212536;
-            --tile3: #252a3c;
-            --accent: #77c1ff;
-            --ok: #52d49a;
-            --warn: #ffbb6b;
-            --danger: #ff6b6b;
-            --clue: #7bd1ff;
-            --flag: #ff5e94;
-            --bomb: #ff4b6e;
-            --flagDigit: #ff6b6b;
+      :root {
+        --bg: #0e0f14;
+        --panel: #171922;
+        --ink: #e8ecf2;
+        --muted: #9aa8b8;
+        --tile: #1d2130;
+        --tile2: #212536;
+        --tile3: #252a3c;
+        --accent: #77c1ff;
+        --ok: #52d49a;
+        --warn: #ffbb6b;
+        --danger: #ff6b6b;
+        --clue: #7bd1ff;
+        --flag: #ff5e94;
+        --bomb: #ff4b6e;
+        --flagDigit: #ff6b6b;
+        --bombHL: #ff7bd1;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: linear-gradient(180deg, #0b0c12, #11131a);
+        color: var(--ink);
+        font: 14px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica,
+          Arial;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        padding: 18px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 18px;
+        color: var(--accent);
+        letter-spacing: 0.3px;
+      }
+
+      .topbar {
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        align-items: center;
+        gap: 12px;
+        width: min(96vw, 980px);
+      }
+
+      .lives {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+
+      .heart {
+        width: 16px;
+        aspect-ratio: 1;
+        background: var(--danger);
+        clip-path: path(
+          "M12 21s-8-4.438-8-11a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 6.562-8 11-8 11Z"
+        );
+        opacity: 0.18;
+      }
+
+      .heart.on {
+        opacity: 1;
+      }
+
+      .stats {
+        justify-self: center;
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      .controls {
+        justify-self: end;
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+
+      select,
+      button {
+        background: var(--panel);
+        color: var(--ink);
+        border: 1px solid #0008;
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-weight: 700;
+        letter-spacing: 0.2px;
+        cursor: pointer;
+        box-shadow: inset 0 0 0 1px #ffffff0a, 0 1px 0 #000a;
+      }
+
+      button:hover {
+        filter: brightness(1.06);
+      }
+
+      button:active {
+        transform: translateY(1px);
+      }
+
+      button[disabled] {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(300px, 650px) minmax(220px, 340px);
+        gap: 14px;
+        width: min(96vw, 980px);
+      }
+
+      .board {
+        width: 100%;
+        aspect-ratio: 1;
+        display: grid;
+        grid-template-columns: repeat(9, 1fr);
+        grid-template-rows: repeat(9, 1fr);
+        gap: 2px;
+        background: #0008;
+        padding: 2px;
+        border-radius: 14px;
+        box-shadow: 0 6px 30px #0008;
+      }
+
+      .cell {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--tile);
+        border-radius: 8px;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+        font-size: clamp(16px, 3vw, 26px);
+        font-weight: 900;
+        color: #e9effa;
+        transition: 0.08s background, 0.08s transform, 0.08s color,
+          0.08s box-shadow;
+      }
+
+      .cell.covered {
+        background: var(--tile2);
+        cursor: pointer;
+      }
+
+      .cell.flag::before {
+        content: "⚑";
+        position: absolute;
+        left: 6px;
+        top: 5px;
+        color: var(--flag);
+        font-size: 14px;
+      }
+
+      /* Flag digit centered like a normal number but red */
+      .flagDigit {
+        position: relative;
+        z-index: 1;
+        color: var(--flagDigit);
+        font-weight: 900;
+        font-size: clamp(16px, 3vw, 26px);
+        text-shadow: 0 1px 0 #0009;
+      }
+
+      .cell.revealed {
+        background: var(--tile3);
+      }
+
+      .cell.normal.revealed {
+        outline: 1px solid #0006;
+      }
+
+      /* New clue styling: same big digit, special color/glow/border */
+      .cell.clue.revealed {
+        color: var(--clue);
+        outline: 2px solid #3a7aa6aa;
+        box-shadow: inset 0 0 0 1px #6fc8ff33, 0 0 6px #6fc8ff33;
+      }
+
+      .cell.bomb.revealed {
+        background: linear-gradient(180deg, #311a22, #2a1a1f);
+        outline: 2px solid #ff4b6e80;
+      }
+
+      .bombmark {
+        position: absolute;
+        font-size: 20px;
+      }
+
+      .cell.given {
+        box-shadow: inset 0 0 0 2px #ffffff08;
+        background: linear-gradient(180deg, #2b3044, #23283b);
+      }
+
+      .subgrid {
+        position: absolute;
+        inset: -2px;
+        border-radius: 10px;
+        pointer-events: none;
+        outline: 2px solid #ffffff08;
+        box-shadow: inset 0 0 0 2px #0004;
+      }
+
+      .panel {
+        background: var(--panel);
+        border-radius: 12px;
+        padding: 12px;
+        box-shadow: 0 6px 24px #0008;
+        align-self: start;
+      }
+
+      .panel h3 {
+        margin: 0 0 8px;
+        font-size: 14px;
+        color: var(--muted);
+      }
+
+      .numpad {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+      }
+
+      .numpad button {
+        padding: 10px 0;
+        font-size: 16px;
+        font-weight: 900;
+      }
+
+      .sel {
+        outline: 2px solid var(--accent);
+      }
+
+      .row {
+        display: flex;
+        gap: 8px;
+        margin-top: 8px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
+      .confirm {
+        background: linear-gradient(180deg, #2b7, #194);
+        border-color: #0a2;
+      }
+
+      .flagModeOn {
+        outline: 2px solid var(--flag);
+        box-shadow: 0 0 0 3px #ff5e941f;
+      }
+
+      .removeFlag {
+        background: linear-gradient(180deg, #c44, #822);
+        border-color: #500;
+      }
+
+      .bad {
+        animation: shake 0.2s linear;
+      }
+
+      @keyframes shake {
+        0% {
+          transform: translateX(0);
         }
 
-        * {
-            box-sizing: border-box
+        25% {
+          transform: translateX(-2px);
         }
 
-        body {
-            margin: 0;
-            background: linear-gradient(180deg, #0b0c12, #11131a);
-            color: var(--ink);
-            font: 14px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 16px;
-            padding: 18px
+        50% {
+          transform: translateX(2px);
         }
 
-        h1 {
-            margin: 0;
-            font-size: 18px;
-            color: var(--accent);
-            letter-spacing: .3px
+        75% {
+          transform: translateX(-1px);
         }
 
-        .topbar {
-            display: grid;
-            grid-template-columns: 1fr auto 1fr;
-            align-items: center;
-            gap: 12px;
-            width: min(96vw, 980px)
+        100% {
+          transform: translateX(0);
         }
+      }
 
-        .lives {
-            display: flex;
-            gap: 6px;
-            align-items: center
-        }
+      .status {
+        color: var(--muted);
+        font-weight: 700;
+        width: min(96vw, 980px);
+      }
 
-        .heart {
-            width: 16px;
-            aspect-ratio: 1;
-            background: var(--danger);
-            clip-path: path("M12 21s-8-4.438-8-11a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 6.562-8 11-8 11Z");
-            opacity: .18
-        }
+      .win {
+        color: var(--ok);
+      }
 
-        .heart.on {
-            opacity: 1
-        }
+      .lose {
+        color: var(--danger);
+      }
 
-        .stats {
-            justify-self: center;
-            color: var(--muted);
-            font-weight: 600
-        }
+      .hint {
+        color: var(--clue);
+      }
 
-        .controls {
-            justify-self: end;
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap
-        }
+      details.block {
+        background: var(--panel);
+        border-radius: 12px;
+        padding: 10px 12px;
+        box-shadow: 0 6px 24px #0008;
+        width: min(96vw, 980px);
+      }
 
-        select,
-        button {
-            background: var(--panel);
-            color: var(--ink);
-            border: 1px solid #0008;
-            border-radius: 10px;
-            padding: 8px 12px;
-            font-weight: 700;
-            letter-spacing: .2px;
-            cursor: pointer;
-            box-shadow: inset 0 0 0 1px #ffffff0a, 0 1px 0 #000a;
-        }
+      details.block > summary {
+        cursor: pointer;
+        outline: none;
+        list-style: none;
+        font-weight: 800;
+        color: var(--accent);
+      }
 
-        button:hover {
-            filter: brightness(1.06)
-        }
+      /* Config grid */
+      .cfggrid {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+        margin-top: 10px;
+      }
 
-        button:active {
-            transform: translateY(1px)
-        }
+      .cfgitem {
+        background: #141822;
+        border: 1px solid #0008;
+        border-radius: 10px;
+        padding: 10px;
+      }
 
-        button[disabled] {
-            opacity: .5;
-            cursor: not-allowed
-        }
+      .cfgitem h4 {
+        margin: 0 0 6px;
+        font-size: 13px;
+        color: var(--muted);
+      }
 
-        .layout {
-            display: grid;
-            grid-template-columns: minmax(300px, 650px) minmax(220px, 340px);
-            gap: 14px;
-            width: min(96vw, 980px)
-        }
+      .cfgitem input[type="range"] {
+        width: 100%;
+      }
 
-        .board {
-            width: 100%;
-            aspect-ratio: 1;
-            display: grid;
-            grid-template-columns: repeat(9, 1fr);
-            grid-template-rows: repeat(9, 1fr);
-            gap: 2px;
-            background: #0008;
-            padding: 2px;
-            border-radius: 14px;
-            box-shadow: 0 6px 30px #0008;
-        }
+      .cfgitem .val {
+        font-weight: 800;
+      }
 
-        .cell {
-            position: relative;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background: var(--tile);
-            border-radius: 8px;
-            user-select: none;
-            -webkit-tap-highlight-color: transparent;
-            font-size: clamp(16px, 3.0vw, 26px);
-            font-weight: 900;
-            color: #e9effa;
-            transition: .08s background, .08s transform, .08s color, .08s box-shadow;
-        }
+      .switch {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
 
-        .cell.covered {
-            background: var(--tile2);
-            cursor: pointer
-        }
+      .kv {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: #cfe;
+        background: #0d1220;
+        padding: 8px;
+        border-radius: 8px;
+        white-space: pre-wrap;
+        border: 1px solid #0008;
+      }
 
-        .cell.flag::before {
-            content: "⚑";
-            position: absolute;
-            left: 6px;
-            top: 5px;
-            color: var(--flag);
-            font-size: 14px
-        }
+      .inlineHelp {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 6px;
+      }
 
-        /* Flag digit centered like a normal number but red */
-        .flagDigit {
-            position: relative;
-            z-index: 1;
-            color: var(--flagDigit);
-            font-weight: 900;
-            font-size: clamp(16px, 3.0vw, 26px);
-            text-shadow: 0 1px 0 #0009;
-        }
+      /* Legend demo tiles */
+      .legend {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 10px;
+      }
 
-        .cell.revealed {
-            background: var(--tile3)
-        }
+      .tileDemo {
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        font-weight: 900;
+        font-size: 18px;
+        position: relative;
+      }
 
-        .cell.normal.revealed {
-            outline: 1px solid #0006
-        }
+      .demo-covered {
+        background: var(--tile2);
+      }
 
-        /* New clue styling: same big digit, special color/glow/border */
-        .cell.clue.revealed {
-            color: var(--clue);
-            outline: 2px solid #3a7aa6aa;
-            box-shadow: inset 0 0 0 1px #6fc8ff33, 0 0 6px #6fc8ff33;
-        }
+      .demo-normal {
+        background: var(--tile3);
+        outline: 1px solid #0006;
+      }
 
-        .cell.bomb.revealed {
-            background: linear-gradient(180deg, #311a22, #2a1a1f);
-            outline: 2px solid #ff4b6e80
-        }
+      .demo-clue {
+        background: var(--tile3);
+        color: var(--clue);
+        outline: 2px solid #3a7aa6aa;
+        box-shadow: inset 0 0 0 1px #6fc8ff33, 0 0 6px #6fc8ff33;
+      }
 
-        .bombmark {
-            position: absolute;
-            font-size: 20px
-        }
+      .demo-flag {
+        background: var(--tile2);
+      }
 
-        .cell.given {
-            box-shadow: inset 0 0 0 2px #ffffff08;
-            background: linear-gradient(180deg, #2b3044, #23283b)
-        }
+      .demo-flag::before {
+        content: "⚑";
+        position: absolute;
+        left: 4px;
+        top: 2px;
+        color: var(--flag);
+        font-size: 12px;
+      }
 
-        .subgrid {
-            position: absolute;
-            inset: -2px;
-            border-radius: 10px;
-            pointer-events: none;
-            outline: 2px solid #ffffff08;
-            box-shadow: inset 0 0 0 2px #0004
-        }
+      .demo-flag .digit {
+        color: var(--flagDigit);
+      }
 
-        .panel {
-            background: var(--panel);
-            border-radius: 12px;
-            padding: 12px;
-            box-shadow: 0 6px 24px #0008;
-            align-self: start;
-        }
+      .demo-bomb {
+        background: linear-gradient(180deg, #311a22, #2a1a1f);
+        outline: 2px solid #ff4b6e80;
+      }
 
-        .panel h3 {
-            margin: 0 0 8px;
-            font-size: 14px;
-            color: var(--muted)
-        }
+      .demo-bomb::after {
+        content: "💣";
+        font-size: 18px;
+      }
 
-        .numpad {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 6px
-        }
+      /* Post-loss overlays */
+      .cell.postHiddenSafe {
+        background: #1d2a30 !important;
+        color: #9bd3ff;
+      }
+      .cell.postHiddenClue {
+        background: #1f2933 !important;
+        color: var(--clue);
+        box-shadow: inset 0 0 0 1px #6fc8ff33;
+      }
+      .cell.postHiddenBomb {
+        background: #3b1f28 !important;
+        outline: 2px dashed #ff4b6ea6;
+      }
 
-        .numpad button {
-            padding: 10px 0;
-            font-size: 16px;
-            font-weight: 900
-        }
+      .cell.flagRight {
+        box-shadow: 0 0 0 2px #41d38a99 inset;
+      }
+      .cell.flagWrong {
+        box-shadow: 0 0 0 2px #ff6b6b99 inset;
+      }
 
-        .sel {
-            outline: 2px solid var(--accent)
-        }
+      .cell.flagDigitWrong .flagDigit {
+        text-decoration: line-through;
+        filter: saturate(0.6) brightness(0.9);
+      }
+      .cell.flagDigitNoteOnBomb .flagDigit {
+        opacity: 0.7;
+      }
 
-        .row {
-            display: flex;
-            gap: 8px;
-            margin-top: 8px;
-            align-items: center;
-            flex-wrap: wrap
-        }
+      /* Review button */
+      .reviewBar {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
 
-        .confirm {
-            background: linear-gradient(180deg, #2b7, #194);
-            border-color: #0a2
-        }
+      /* Wrapper gives positioning context for gutter overlays */
+      .boardWrap {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 1;
+        margin: 0;
+        padding-top: 40px;
+        padding-left: 56px;
+      }
 
-        .flagModeOn {
-            outline: 2px solid var(--flag);
-            box-shadow: 0 0 0 3px #ff5e941f
-        }
+      /* Overlays sit on top and accept hover */
+      .rowHints,
+      .colHints {
+        position: absolute;
+        inset: 0;
+        pointer-events: auto;
+        font-weight: 800;
+        font-size: 12px;
+        color: var(--muted);
+        text-shadow: 0 1px 0 #000;
+        z-index: 5;
+        pointer-events: none;
+      }
 
-        .removeFlag {
-            background: linear-gradient(180deg, #c44, #822);
-            border-color: #500
-        }
+      .gutRow,
+      .gutCol {
+        display: inline-flex; /* keep icon + number on same line */
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap; /* prevent wrap (fixes last column) */
+        line-height: 1; /* tighter box */
+        padding: 2px 8px; /* a bit more room for both glyphs */
+        pointer-events: auto;
+      }
 
-        .bad {
-            animation: shake .2s linear
-        }
+      /* Row badges: now live IN the left gutter (no negatives) */
+      .gutRow {
+        position: absolute;
+        left: 8px; /* was -44px */
+        transform: translateY(-50%);
+        padding: 2px 6px;
+        background: #0b1222cc;
+        border: 1px solid #0008;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px #0008, inset 0 0 0 1px #ffffff12;
+        cursor: default;
+      }
 
-        @keyframes shake {
-            0% {
-                transform: translateX(0)
-            }
+      /* Column badges: now live IN the top gutter (no negatives) */
+      .gutCol {
+        position: absolute;
+        top: 8px; /* was -32px */
+        transform: translateX(-50%);
+        padding: 2px 6px;
+        background: #0b1222cc;
+        border: 1px solid #0008;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px #0008, inset 0 0 0 1px #ffffff12;
+        cursor: default;
+      }
 
-            25% {
-                transform: translateX(-2px)
-            }
+      .hlStripe {
+        position: absolute;
+        z-index: 6; /* above cells & subgrid lines, below badges */
+        pointer-events: none; /* don’t block clicks */
+        display: none;
+        border-radius: 6px;
+        box-shadow: inset 0 0 0 2px #ffffff14;
+      }
 
-            50% {
-                transform: translateX(2px)
-            }
+      #rowHL {
+        background: color-mix(in oklab, var(--bombHL) 22%, transparent);
+        outline: 2px solid color-mix(in oklab, var(--bombHL) 45%, transparent);
+      }
 
-            75% {
-                transform: translateX(-1px)
-            }
-
-            100% {
-                transform: translateX(0)
-            }
-        }
-
-        .status {
-            color: var(--muted);
-            font-weight: 700;
-            width: min(96vw, 980px)
-        }
-
-        .win {
-            color: var(--ok)
-        }
-
-        .lose {
-            color: var(--danger)
-        }
-
-        .hint {
-            color: var(--clue)
-        }
-
-        details.block {
-            background: var(--panel);
-            border-radius: 12px;
-            padding: 10px 12px;
-            box-shadow: 0 6px 24px #0008;
-            width: min(96vw, 980px)
-        }
-
-        details.block>summary {
-            cursor: pointer;
-            outline: none;
-            list-style: none;
-            font-weight: 800;
-            color: var(--accent)
-        }
-
-        /* Config grid */
-        .cfggrid {
-            display: grid;
-            gap: 10px;
-            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-            margin-top: 10px
-        }
-
-        .cfgitem {
-            background: #141822;
-            border: 1px solid #0008;
-            border-radius: 10px;
-            padding: 10px;
-        }
-
-        .cfgitem h4 {
-            margin: 0 0 6px;
-            font-size: 13px;
-            color: var(--muted)
-        }
-
-        .cfgitem input[type="range"] {
-            width: 100%
-        }
-
-        .cfgitem .val {
-            font-weight: 800
-        }
-
-        .switch {
-            display: flex;
-            gap: 8px;
-            align-items: center
-        }
-
-        .kv {
-            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-            font-size: 12px;
-            color: #cfe;
-            background: #0d1220;
-            padding: 8px;
-            border-radius: 8px;
-            white-space: pre-wrap;
-            border: 1px solid #0008
-        }
-
-        .inlineHelp {
-            color: var(--muted);
-            font-size: 12px;
-            margin-top: 6px
-        }
-
-        /* Legend demo tiles */
-        .legend {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            margin-top: 10px
-        }
-
-        .tileDemo {
-            width: 36px;
-            height: 36px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 8px;
-            font-weight: 900;
-            font-size: 18px;
-            position: relative;
-        }
-
-        .demo-covered {
-            background: var(--tile2)
-        }
-
-        .demo-normal {
-            background: var(--tile3);
-            outline: 1px solid #0006
-        }
-
-        .demo-clue {
-            background: var(--tile3);
-            color: var(--clue);
-            outline: 2px solid #3a7aa6aa;
-            box-shadow: inset 0 0 0 1px #6fc8ff33, 0 0 6px #6fc8ff33
-        }
-
-        .demo-flag {
-            background: var(--tile2)
-        }
-
-        .demo-flag::before {
-            content: "⚑";
-            position: absolute;
-            left: 4px;
-            top: 2px;
-            color: var(--flag);
-            font-size: 12px
-        }
-
-        .demo-flag .digit {
-            color: var(--flagDigit)
-        }
-
-        .demo-bomb {
-            background: linear-gradient(180deg, #311a22, #2a1a1f);
-            outline: 2px solid #ff4b6e80
-        }
-
-        .demo-bomb::after {
-            content: "💣";
-            font-size: 18px
-        }
+      #colHL {
+        background: color-mix(in oklab, var(--bombHL) 18%, transparent);
+        outline: 2px solid color-mix(in oklab, var(--bombHL) 40%, transparent);
+      }
     </style>
-</head>
+  </head>
 
-<body>
+  <body>
     <div class="topbar">
-        <div class="lives" id="lives"></div>
-        <div class="stats">Bombs: <b id="bombsLeft">--</b> • Flags: <b id="flagsCnt">0</b></div>
-        <div class="controls">
-            <select id="mode" title="Mode">
-                <option value="story" selected>Story</option>
-                <option value="normal">Normal</option>
-                <option value="hard">Hard</option>
-                <option value="custom">Custom…</option>
-            </select>
-            <button id="newRun">New Run</button>
-        </div>
+      <div class="lives" id="lives"></div>
+      <div class="stats">
+        Bombs: <b id="bombsLeft">--</b> • Flags: <b id="flagsCnt">0</b>
+      </div>
+      <div class="controls">
+        <select id="mode" title="Mode">
+          <option value="story" selected>Story</option>
+          <option value="normal">Normal</option>
+          <option value="hard">Hard</option>
+          <option value="custom">Custom…</option>
+        </select>
+        <button id="newRun">New Run</button>
+        <button id="reviewBtn" style="display: none">👁 Review Board</button>
+      </div>
     </div>
 
     <div class="layout">
-        <div id="board" class="board" role="grid" aria-label="Runic Sudoku board"></div>
+      <div class="boardWrap">
+        <div
+          id="board"
+          class="board"
+          role="grid"
+          aria-label="Runic Sudoku board"
+        ></div>
 
-        <aside class="panel" style="width:100%;max-width:340px">
-            <h3>Number</h3>
-            <div class="numpad" id="numpad"></div>
-            <div class="row">
-                <button id="confirm" class="confirm" title="Confirm on selected tile">Confirm</button>
-                <button id="flagBtn" title="Toggle flag mode">⚑ Flag</button>
-                <button id="removeFlagBtn" class="removeFlag" title="Remove flag on selected tile" disabled>✖ Remove
-                    Flag</button>
-            </div>
-            <div class="row" style="margin-top:10px">
-                <small id="asideHint" class="hint">
-                    Flag mode: pick a number → Confirm to place a flag (no life loss). Remove Flag deletes the flag &
-                    its digit.
-                </small>
-            </div>
-            <div class="row" style="margin-top:12px;flex-direction:column;align-items:stretch">
-                <h3>Active Config</h3>
-                <div id="activeConfig" class="kv"></div>
-            </div>
-        </aside>
+        <!-- Gutters for on-board hints -->
+        <div id="rowHintsOverlay" class="rowHints"></div>
+        <div id="colHintsOverlay" class="colHints"></div>
+      </div>
+
+      <aside class="panel" style="width: 100%; max-width: 340px">
+        <h3>Number</h3>
+        <div class="numpad" id="numpad"></div>
+        <div class="row">
+          <button id="confirm" class="confirm" title="Confirm on selected tile">
+            Confirm
+          </button>
+          <button id="flagBtn" title="Toggle flag mode">⚑ Flag</button>
+          <button
+            id="removeFlagBtn"
+            class="removeFlag"
+            title="Remove flag on selected tile"
+            disabled
+          >
+            ✖ Remove Flag
+          </button>
+        </div>
+        <div class="row" style="margin-top: 10px">
+          <small id="asideHint" class="hint">
+            Flag mode: pick a number → Confirm to place a numbered flag (no life
+            loss), or Confirm with no number to place a <b>blank flag</b>. “✖
+            Remove Flag” clears the flag & its digit.
+          </small>
+        </div>
+        <div
+          class="row"
+          style="margin-top: 12px; flex-direction: column; align-items: stretch"
+        >
+          <h3>Active Config</h3>
+          <div id="activeConfig" class="kv"></div>
+        </div>
+      </aside>
     </div>
 
     <!-- 📘 How to Play / Legend -->
     <details class="block" id="guide">
-        <summary>📘 How to Play, Rules & Legend</summary>
-        <div style="margin-top:10px">
-            <ol>
-                <li><b>Goal:</b> Flag <i>all bombs</i> and reveal all safe digits. Follow <b>Sudoku rules</b> (1–9 in
-                    each row/column/3×3 block).</li>
-                <li><b>Two modes:</b>
-                    <ul>
-                        <li><b>Reveal mode</b> — pick a number, select a covered tile, hit <b>Confirm</b>.
-                            <ul>
-                                <li>If you reveal a bomb → <b>instant loss</b>.</li>
-                                <li>If the digit is wrong → <b>lose 1 life</b>.</li>
-                                <li>If correct → the tile reveals. If it’s a <b>clue</b>, it means the <u>shown digit
-                                        equals the count of adjacent bombs</u>.</li>
-                            </ul>
-                        </li>
-                        <li><b>Flag mode</b> — click <b>⚑ Flag</b>, pick a number, select a tile, then <b>Confirm</b>.
-                            <ul>
-                                <li>Places a <b>flag + red digit</b> (your hypothesis). <b>No life loss</b> for wrong
-                                    flags.</li>
-                                <li>Use <b>✖ Remove Flag</b> on a selected flagged tile to clear it and its digit.</li>
-                            </ul>
-                        </li>
-                    </ul>
-                </li>
-                <li><b>Clue tiles</b> are safe digits where the number also equals the number of bombs in the 8
-                    neighbors (Minesweeper-style). They look like normal digits but are <span
-                        style="color:var(--clue);font-weight:800">teal</span> and slightly glowing.</li>
-                <li><b>Lives & Endings:</b> You start with lives (see top-left hearts). Wrong reveal digits cost 1 life.
-                    Revealing a bomb loses instantly. Win by revealing all safe tiles and flagging all bombs.</li>
-            </ol>
-            <div class="legend">
-                <div class="tileDemo demo-covered" title="Covered tile"></div>
-                <div class="tileDemo demo-normal" title="Revealed normal digit"><span>5</span></div>
-                <div class="tileDemo demo-clue" title="Revealed clue digit (teal)"><span>3</span></div>
-                <div class="tileDemo demo-flag" title="Flag with digit"><span class="digit">7</span></div>
-                <div class="tileDemo demo-bomb" title="Revealed bomb"></div>
-            </div>
+      <summary>📘 How to Play, Rules & Legend</summary>
+      <div style="margin-top: 10px">
+        <ol>
+          <li>
+            <b>Goal:</b> Flag <i>all bombs</i> and reveal all safe digits.
+            Follow <b>Sudoku rules</b> (1–9 in each row/column/3×3 block).
+          </li>
+          <li>
+            <b>Two modes:</b>
+            <ul>
+              <li>
+                <b>Reveal mode</b> — pick a number, select a covered tile, hit
+                <b>Confirm</b>.
+                <ul>
+                  <li>If you reveal a bomb → <b>instant loss</b>.</li>
+                  <li>If the digit is wrong → <b>lose 1 life</b>.</li>
+                  <li>
+                    If correct → the tile reveals. If it’s a <b>clue</b>, it
+                    means the
+                    <u>shown digit equals the count of adjacent bombs</u>.
+                  </li>
+                </ul>
+              </li>
+              <li>
+                <b>Flag mode</b> — click <b>⚑ Flag</b>, pick a number, select a
+                tile, then <b>Confirm</b>.
+                <ul>
+                  <li>
+                    Places a <b>flag + red digit</b> (your hypothesis).
+                    <b>No life loss</b> for wrong flags.
+                  </li>
+                  <li>
+                    Use <b>✖ Remove Flag</b> on a selected flagged tile to clear
+                    it and its digit.
+                  </li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+          <li>
+            <b>Clue tiles</b> are safe digits where the number also equals the
+            number of bombs in the 8 neighbors (Minesweeper-style). They look
+            like normal digits but are
+            <span style="color: var(--clue); font-weight: 800">teal</span> and
+            slightly glowing.
+          </li>
+          <li>
+            <b>Lives & Endings:</b> You start with lives (see top-left hearts).
+            Wrong reveal digits cost 1 life. Revealing a bomb loses instantly.
+            Win by revealing all safe tiles and flagging all bombs.
+          </li>
+        </ol>
+        <div class="legend">
+          <div class="tileDemo demo-covered" title="Covered tile"></div>
+          <div class="tileDemo demo-normal" title="Revealed normal digit">
+            <span>5</span>
+          </div>
+          <div class="tileDemo demo-clue" title="Revealed clue digit (teal)">
+            <span>3</span>
+          </div>
+          <div class="tileDemo demo-flag" title="Flag with digit">
+            <span class="digit">7</span>
+          </div>
+          <div class="tileDemo demo-bomb" title="Revealed bomb"></div>
         </div>
+      </div>
     </details>
 
     <!-- ⚙️ Config -->
     <details class="block" id="configPanel">
-        <summary>⚙️ Configure Mode (Custom unlocks inputs)</summary>
-        <div class="cfggrid">
-            <div class="cfgitem">
-                <h4>Lives: <span class="val" id="valLives">3</span></h4>
-                <input type="range" id="cfgLives" min="1" max="7" step="1" value="3" />
-            </div>
-            <div class="cfgitem">
-                <h4>Bomb Ratio: <span class="val" id="valBombRatio">0.13</span></h4>
-                <input type="range" id="cfgBombRatio" min="0.08" max="0.30" step="0.01" value="0.13" />
-                <div class="inlineHelp">% of cells that are bombs (0.13 ≈ 10–12 bombs).</div>
-            </div>
-            <div class="cfgitem">
-                <h4>Anchors in District: <span class="val" id="valAnchors">7</span></h4>
-                <input type="range" id="cfgAnchors" min="3" max="8" step="1" value="7" />
-                <div class="inlineHelp">Safe tiles revealed inside an anchored 3×3 block (clue-biased).</div>
-            </div>
-            <div class="cfgitem">
-                <h4>Start Clues Target: <span class="val" id="valStartClues">26</span></h4>
-                <input type="range" id="cfgStartClues" min="6" max="45" step="1" value="26" />
-                <div class="inlineHelp">Minimum count of clue tiles shown at start.</div>
-            </div>
-            <div class="cfgitem">
-                <h4>Start Givens (Total): <span class="val" id="valStartGivens">52</span></h4>
-                <input type="range" id="cfgStartGivens" min="10" max="65" step="1" value="52" />
-                <div class="inlineHelp">Total tiles revealed at start (clues & normals; never bombs).</div>
-            </div>
-            <div class="cfgitem">
-                <h4>Max Adj for Start: <span class="val" id="valMaxAdj">2</span></h4>
-                <input type="range" id="cfgMaxAdj" min="0" max="8" step="1" value="2" />
-                <div class="inlineHelp">Prefer clues with ≤ this many adjacent bombs (lower = easier logic).</div>
-            </div>
-            <div class="cfgitem switch">
-                <input type="checkbox" id="cfgSpreadRows" checked />
-                <label for="cfgSpreadRows">Spread by Rows</label>
-            </div>
-            <div class="cfgitem switch">
-                <input type="checkbox" id="cfgSpreadBlocks" checked />
-                <label for="cfgSpreadBlocks">Spread by Blocks</label>
-            </div>
-            <div class="cfgitem">
-                <button id="saveCustom">💾 Save Custom</button>
-                <button id="resetCustom">↺ Reset Custom</button>
-            </div>
+      <summary>⚙️ Configure Mode (Custom unlocks inputs)</summary>
+      <div class="cfggrid">
+        <div class="cfgitem">
+          <h4>Lives: <span class="val" id="valLives">3</span></h4>
+          <input
+            type="range"
+            id="cfgLives"
+            min="1"
+            max="7"
+            step="1"
+            value="3"
+          />
         </div>
+        <div class="cfgitem">
+          <h4>Bomb Ratio: <span class="val" id="valBombRatio">0.13</span></h4>
+          <input
+            type="range"
+            id="cfgBombRatio"
+            min="0.08"
+            max="0.30"
+            step="0.01"
+            value="0.13"
+          />
+          <div class="inlineHelp">
+            % of cells that are bombs (0.13 ≈ 10–12 bombs).
+          </div>
+        </div>
+        <div class="cfgitem">
+          <h4>
+            Start Clues Target: <span class="val" id="valStartClues">26</span>
+          </h4>
+          <input
+            type="range"
+            id="cfgStartClues"
+            min="6"
+            max="45"
+            step="1"
+            value="26"
+          />
+          <div class="inlineHelp">
+            Minimum count of clue tiles shown at start.
+          </div>
+        </div>
+        <div class="cfgitem">
+          <h4>
+            Start Givens (Total):
+            <span class="val" id="valStartGivens">52</span>
+          </h4>
+          <input
+            type="range"
+            id="cfgStartGivens"
+            min="10"
+            max="65"
+            step="1"
+            value="52"
+          />
+          <div class="inlineHelp">
+            Total tiles revealed at start (clues & normals; never bombs).
+          </div>
+        </div>
+        <div class="cfgitem">
+          <h4>Max Adj for Start: <span class="val" id="valMaxAdj">2</span></h4>
+          <input
+            type="range"
+            id="cfgMaxAdj"
+            min="0"
+            max="8"
+            step="1"
+            value="2"
+          />
+          <div class="inlineHelp">
+            Prefer clues with ≤ this many adjacent bombs (lower = easier logic).
+          </div>
+        </div>
+        <div class="cfgitem switch">
+          <input type="checkbox" id="cfgSpreadRows" checked />
+          <label for="cfgSpreadRows">Spread by Rows</label>
+        </div>
+        <div class="cfgitem switch">
+          <input type="checkbox" id="cfgSpreadBlocks" checked />
+          <label for="cfgSpreadBlocks">Spread by Blocks</label>
+        </div>
+        <div class="cfgitem">
+          <button id="saveCustom">💾 Save Custom</button>
+          <button id="resetCustom">↺ Reset Custom</button>
+        </div>
+      </div>
     </details>
 
     <div id="status" class="status">
-        Rules: Flag mode → pick a number → Confirm to place a flag (no life loss). Remove Flag clears the flag & its
-        digit. Reveal mode → pick a number → Confirm to reveal; wrong digit costs a life; revealing a bomb loses
-        instantly.
+      Rules: Flag mode → pick a number → Confirm to place a flag (no life loss).
+      Remove Flag clears the flag & its digit. Reveal mode → pick a number →
+      Confirm to reveal; wrong digit costs a life; revealing a bomb loses
+      instantly.
     </div>
 
     <script>
-        (() => {
-            // ========= Modes & Defaults (Story/Normal show more starts) =========
-            const SIDE = 9, BASE = 3;
+      (() => {
+        // ========= Modes & Defaults (Story/Normal show more starts) =========
+        const SIDE = 9,
+          BASE = 3;
 
-            const PRESETS = {
-                // Easier but much sparser opening
-                story: { lives: 3, bombRatio: 0.14, anchors: 5, targetStartClues: 16, targetStartGivens: 36, maxAdjStart: 3, spreadRows: true, spreadBlocks: true },
+        const PRESETS = {
+          // More solvable; more clues, gentle anchors, stricter maxAdj (2)
+          story: {
+            lives: 3,
+            bombRatio: 0.14,
+            targetStartClues: 19,
+            targetStartGivens: 40,
+            maxAdjStart: 2,
+            spreadRows: true,
+            spreadBlocks: true,
+            hintRows: 3,
+            hintCols: 3,
+          },
 
-                // Moderate: fewer givens & clues
-                normal: { lives: 3, bombRatio: 0.18, anchors: 4, targetStartClues: 12, targetStartGivens: 28, maxAdjStart: 4, spreadRows: true, spreadBlocks: true },
+          // Moderate; still adds clues and starts, a bit looser maxAdj (3)
+          normal: {
+            lives: 3,
+            bombRatio: 0.18,
+            targetStartClues: 15,
+            targetStartGivens: 32,
+            maxAdjStart: 3,
+            spreadRows: true,
+            spreadBlocks: true,
+            hintRows: 2,
+            hintCols: 2,
+          },
 
-                // Hard: very sparse start
-                hard: { lives: 5, bombRatio: 0.22, anchors: 3, targetStartClues: 8, targetStartGivens: 18, maxAdjStart: 5, spreadRows: true, spreadBlocks: true },
+          // Hard stays spicy but not brutal; a tad more starts
+          hard: {
+            lives: 5,
+            bombRatio: 0.22,
+            targetStartClues: 9,
+            targetStartGivens: 20,
+            maxAdjStart: 4,
+            spreadRows: true,
+            spreadBlocks: true,
+            hintRows: 1,
+            hintCols: 2,
+          },
 
-                // Custom starts from story-ish but lean
-                custom: { lives: 3, bombRatio: 0.14, anchors: 5, targetStartClues: 14, targetStartGivens: 32, maxAdjStart: 3, spreadRows: true, spreadBlocks: true }
-            };
+          // Custom starts from the Story-ish baseline
+          custom: {
+            lives: 3,
+            bombRatio: 0.14,
+            targetStartClues: 17,
+            targetStartGivens: 36,
+            maxAdjStart: 2,
+            spreadRows: true,
+            spreadBlocks: true,
+            hintRows: 3,
+            hintCols: 3,
+          },
+        };
 
-            const LS_KEY = "runic-custom-config-v1";
+        const LS_KEY = "runic-custom-config-v1";
 
-            // ========= State =========
-            let mode = "story";
-            let solution = [], bombs = [], adj = [], revealed = [], flagged = [], flagNote = [], given = [];
-            let lives = 3, bombsTotal = 0, bombsLeft = 0, flagsCount = 0;
-            let selected = null, pickedDigit = null, gameOver = false, flagMode = false;
-            let lastAnchorInfo = { br: 0, bc: 0, anchorsPlaced: 0 };
+        // ========= State =========
+        let mode = "story";
+        let solution = [],
+          bombs = [],
+          adj = [],
+          revealed = [],
+          flagged = [],
+          flagNote = [],
+          given = [];
+        let lives = 3,
+          bombsTotal = 0,
+          bombsLeft = 0,
+          flagsCount = 0;
+        let selected = null,
+          pickedDigit = null,
+          gameOver = false,
+          flagMode = false;
+        let reviewMode = false,
+          didWin = false;
+        let hintedRows = [],
+          hintedCols = [];
+        let rowTotals = [],
+          colTotals = [];
 
-            // ========= DOM =========
-            const boardEl = document.getElementById('board');
-            const livesEl = document.getElementById('lives');
-            const bombsLeftEl = document.getElementById('bombsLeft');
-            const flagsCntEl = document.getElementById('flagsCnt');
-            const statusEl = document.getElementById('status');
-            const modeEl = document.getElementById('mode');
-            const newRunBtn = document.getElementById('newRun');
-            const numpadEl = document.getElementById('numpad');
-            const confirmBtn = document.getElementById('confirm');
-            const flagBtn = document.getElementById('flagBtn');
-            const removeFlagBtn = document.getElementById('removeFlagBtn');
-            const asideHint = document.getElementById('asideHint');
-            const activeConfigEl = document.getElementById('activeConfig');
+        // ========= DOM =========
+        const boardEl = document.getElementById("board");
+        const livesEl = document.getElementById("lives");
+        const bombsLeftEl = document.getElementById("bombsLeft");
+        const flagsCntEl = document.getElementById("flagsCnt");
+        const statusEl = document.getElementById("status");
+        const modeEl = document.getElementById("mode");
+        const newRunBtn = document.getElementById("newRun");
+        const numpadEl = document.getElementById("numpad");
+        const confirmBtn = document.getElementById("confirm");
+        const flagBtn = document.getElementById("flagBtn");
+        const removeFlagBtn = document.getElementById("removeFlagBtn");
+        const asideHint = document.getElementById("asideHint");
+        const activeConfigEl = document.getElementById("activeConfig");
 
-            const cfgLives = document.getElementById('cfgLives');
-            const cfgBombRatio = document.getElementById('cfgBombRatio');
-            const cfgAnchors = document.getElementById('cfgAnchors');
-            const cfgStartClues = document.getElementById('cfgStartClues');
-            const cfgStartGivens = document.getElementById('cfgStartGivens');
-            const cfgMaxAdj = document.getElementById('cfgMaxAdj');
-            const cfgSpreadRows = document.getElementById('cfgSpreadRows');
-            const cfgSpreadBlocks = document.getElementById('cfgSpreadBlocks');
+        const cfgLives = document.getElementById("cfgLives");
+        const cfgBombRatio = document.getElementById("cfgBombRatio");
+        const cfgStartClues = document.getElementById("cfgStartClues");
+        const cfgStartGivens = document.getElementById("cfgStartGivens");
+        const cfgMaxAdj = document.getElementById("cfgMaxAdj");
+        const cfgSpreadRows = document.getElementById("cfgSpreadRows");
+        const cfgSpreadBlocks = document.getElementById("cfgSpreadBlocks");
 
-            const valLives = document.getElementById('valLives');
-            const valBombRatio = document.getElementById('valBombRatio');
-            const valAnchors = document.getElementById('valAnchors');
-            const valStartClues = document.getElementById('valStartClues');
-            const valStartGivens = document.getElementById('valStartGivens');
-            const valMaxAdj = document.getElementById('valMaxAdj');
+        const valLives = document.getElementById("valLives");
+        const valBombRatio = document.getElementById("valBombRatio");
+        const valStartClues = document.getElementById("valStartClues");
+        const valStartGivens = document.getElementById("valStartGivens");
+        const valMaxAdj = document.getElementById("valMaxAdj");
 
-            const saveCustomBtn = document.getElementById('saveCustom');
-            const resetCustomBtn = document.getElementById('resetCustom');
-            const configPanel = document.getElementById('configPanel');
+        const saveCustomBtn = document.getElementById("saveCustom");
+        const resetCustomBtn = document.getElementById("resetCustom");
+        const configPanel = document.getElementById("configPanel");
+        const reviewBtn = document.getElementById("reviewBtn");
 
-            window.addEventListener('contextmenu', e => e.preventDefault(), { passive: false });
+        const boardWrapEl = document.querySelector(".boardWrap");
+        const rowHL = document.createElement("div");
+        rowHL.id = "rowHL";
+        rowHL.className = "hlStripe";
+        const colHL = document.createElement("div");
+        colHL.id = "colHL";
+        colHL.className = "hlStripe";
+        boardWrapEl.appendChild(rowHL);
+        boardWrapEl.appendChild(colHL);
 
-            // ========= Utils =========
-            const inBounds = (r, c) => r >= 0 && r < SIDE && c >= 0 && c < SIDE;
-            const neighbors8 = (r, c) => { const res = []; for (let dr = -1; dr <= 1; dr++)for (let dc = -1; dc <= 1; dc++) { if (!dr && !dc) continue; const rr = r + dr, cc = c + dc; if (inBounds(rr, cc)) res.push([rr, cc]); } return res; };
-            const randInt = n => Math.floor(Math.random() * n);
-            const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = randInt(i + 1);[a[i], a[j]] = [a[j], a[i]]; } return a; };
+        reviewBtn.addEventListener("click", () => {
+          if (!gameOver || didWin) return;
+          reviewMode = !reviewMode;
+          reviewBtn.textContent = reviewMode
+            ? "◼ Exit Review"
+            : "👁 Review Board";
+          renderBoard();
+        });
 
-            // ========= Sudoku & Board Generators =========
-            function generateSudokuSolved() {
-                const pattern = (r, c) => (BASE * (r % BASE) + Math.floor(r / BASE) + c) % SIDE;
-                const rBase = [0, 1, 2];
-                const rows = [].concat(...shuffle([0, 1, 2]).map(g => shuffle(rBase).map(r => g * BASE + r)));
-                const cols = [].concat(...shuffle([0, 1, 2]).map(g => shuffle(rBase).map(c => g * BASE + c)));
-                const nums = shuffle([1, 2, 3, 4, 5, 6, 7, 8, 9]);
-                const g = Array.from({ length: SIDE }, _ => Array(SIDE).fill(0));
-                for (let r = 0; r < SIDE; r++)for (let c = 0; c < SIDE; c++)g[rows[r]][cols[c]] = nums[pattern(r, c)];
-                return g;
+        window.addEventListener("contextmenu", (e) => e.preventDefault(), {
+          passive: false,
+        });
+
+        window.addEventListener("resize", () => {
+          renderRowColHintsOverlay();
+          hideHL();
+        });
+
+        new ResizeObserver(() => {
+          renderRowColHintsOverlay();
+          hideHL();
+        }).observe(boardWrapEl);
+
+        // ========= Utils =========
+        const inBounds = (r, c) => r >= 0 && r < SIDE && c >= 0 && c < SIDE;
+        const neighbors8 = (r, c) => {
+          const res = [];
+          for (let dr = -1; dr <= 1; dr++)
+            for (let dc = -1; dc <= 1; dc++) {
+              if (!dr && !dc) continue;
+              const rr = r + dr,
+                cc = c + dc;
+              if (inBounds(rr, cc)) res.push([rr, cc]);
             }
-            function placeBombs(ratio) {
-                const total = SIDE * SIDE, target = Math.max(1, Math.floor(total * ratio));
-                const b = Array.from({ length: SIDE }, _ => Array(SIDE).fill(false));
-                const pool = []; for (let r = 0; r < SIDE; r++)for (let c = 0; c < SIDE; c++) pool.push([r, c]);
-                shuffle(pool);
-                for (let i = 0; i < target; i++) { const [r, c] = pool[i]; b[r][c] = true; }
-                return { b, count: target };
+          return res;
+        };
+        const randInt = (n) => Math.floor(Math.random() * n);
+        const shuffle = (a) => {
+          for (let i = a.length - 1; i > 0; i--) {
+            const j = randInt(i + 1);
+            [a[i], a[j]] = [a[j], a[i]];
+          }
+          return a;
+        };
+
+        // ========= Sudoku & Board Generators =========
+        function generateSudokuSolved() {
+          const pattern = (r, c) =>
+            (BASE * (r % BASE) + Math.floor(r / BASE) + c) % SIDE;
+          const rBase = [0, 1, 2];
+          const rows = [].concat(
+            ...shuffle([0, 1, 2]).map((g) =>
+              shuffle(rBase).map((r) => g * BASE + r)
+            )
+          );
+          const cols = [].concat(
+            ...shuffle([0, 1, 2]).map((g) =>
+              shuffle(rBase).map((c) => g * BASE + c)
+            )
+          );
+          const nums = shuffle([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+          const g = Array.from({ length: SIDE }, (_) => Array(SIDE).fill(0));
+          for (let r = 0; r < SIDE; r++)
+            for (let c = 0; c < SIDE; c++)
+              g[rows[r]][cols[c]] = nums[pattern(r, c)];
+          return g;
+        }
+        function placeBombs(ratio) {
+          const total = SIDE * SIDE,
+            target = Math.max(1, Math.floor(total * ratio));
+          const b = Array.from({ length: SIDE }, (_) =>
+            Array(SIDE).fill(false)
+          );
+          const pool = [];
+          for (let r = 0; r < SIDE; r++)
+            for (let c = 0; c < SIDE; c++) pool.push([r, c]);
+          shuffle(pool);
+          for (let i = 0; i < target; i++) {
+            const [r, c] = pool[i];
+            b[r][c] = true;
+          }
+          return { b, count: target };
+        }
+        function computeAdj(b) {
+          const A = Array.from({ length: SIDE }, (_) => Array(SIDE).fill(0));
+          for (let r = 0; r < SIDE; r++)
+            for (let c = 0; c < SIDE; c++)
+              A[r][c] = neighbors8(r, c).reduce(
+                (acc, [rr, cc]) => acc + (b[rr][cc] ? 1 : 0),
+                0
+              );
+          return A;
+        }
+        function tileType(r, c) {
+          if (bombs[r][c]) return "bomb";
+          return solution[r][c] === adj[r][c] ? "clue" : "normal";
+        }
+
+        // ========= Pattern Encouragement & Guarantees =========
+        // Ensures each bomb has >= 2 neighboring CLUE tiles (triangulation)
+        // (repositions "weak" bombs locally to increase clue support)
+        function ensureBombHasTwoSupports(maxPasses = 2) {
+          const countClueNeighbors = (r, c, A = adj) =>
+            neighbors8(r, c).reduce(
+              (n, [rr, cc]) =>
+                n + (!bombs[rr][cc] && solution[rr][cc] === A[rr][cc] ? 1 : 0),
+              0
+            );
+
+          for (let pass = 0; pass < maxPasses; pass++) {
+            let moved = false;
+
+            for (let r = 0; r < SIDE; r++)
+              for (let c = 0; c < SIDE; c++) {
+                if (!bombs[r][c]) continue;
+
+                const supports = countClueNeighbors(r, c, adj);
+                if (supports >= 2) continue;
+
+                // Try relocating this bomb to a nearby safe cell that yields >=2 supports
+                let best = null,
+                  bestScore = -1;
+
+                for (let dr = -2; dr <= 2; dr++)
+                  for (let dc = -2; dc <= 2; dc++) {
+                    const rr = r + dr,
+                      cc = c + dc;
+                    if (!inBounds(rr, cc) || bombs[rr][cc]) continue;
+
+                    bombs[r][c] = false;
+                    bombs[rr][cc] = true;
+                    const A = computeAdj(bombs);
+
+                    const sup = countClueNeighbors(rr, cc, A);
+
+                    // Score: prefer >=2 supports, then overall cluefulness
+                    let score = sup >= 2 ? 1000 : 0;
+                    if (score) {
+                      for (let i = 0; i < SIDE; i++)
+                        for (let j = 0; j < SIDE; j++)
+                          if (!bombs[i][j] && solution[i][j] === A[i][j])
+                            score++;
+                    }
+
+                    bombs[r][c] = true;
+                    bombs[rr][cc] = false;
+                    if (score > bestScore) {
+                      bestScore = score;
+                      best = [rr, cc];
+                    }
+                  }
+
+                if (best) {
+                  const [nr, nc] = best;
+                  bombs[r][c] = false;
+                  bombs[nr][nc] = true;
+                  adj = computeAdj(bombs);
+                  moved = true;
+                }
+              }
+
+            if (!moved) break;
+          }
+        }
+        function clusterClues() {
+          const isClue = (r, c) => !bombs[r][c] && solution[r][c] === adj[r][c];
+          const seen = Array.from({ length: SIDE }, (_) =>
+            Array(SIDE).fill(false)
+          );
+          const comps = [];
+
+          for (let r = 0; r < SIDE; r++)
+            for (let c = 0; c < SIDE; c++) {
+              if (seen[r][c] || !isClue(r, c)) continue;
+              const comp = [];
+              const q = [[r, c]];
+              seen[r][c] = true;
+              while (q.length) {
+                const [x, y] = q.shift();
+                comp.push([x, y]);
+                for (const [nx, ny] of neighbors8(x, y)) {
+                  if (!seen[nx][ny] && isClue(nx, ny)) {
+                    seen[nx][ny] = true;
+                    q.push([nx, ny]);
+                  }
+                }
+              }
+              comps.push(comp);
             }
-            function computeAdj(b) {
-                const A = Array.from({ length: SIDE }, _ => Array(SIDE).fill(0));
-                for (let r = 0; r < SIDE; r++)for (let c = 0; c < SIDE; c++)
-                    A[r][c] = neighbors8(r, c).reduce((acc, [rr, cc]) => acc + (b[rr][cc] ? 1 : 0), 0);
-                return A;
-            }
-            function tileType(r, c) {
-                if (bombs[r][c]) return "bomb";
-                return (solution[r][c] === adj[r][c]) ? "clue" : "normal";
-            }
+          comps.sort((A, B) => {
+            const avgA = A.reduce((s, [r, c]) => s + adj[r][c], 0) / A.length;
+            const avgB = B.reduce((s, [r, c]) => s + adj[r][c], 0) / B.length;
+            return B.length - A.length || avgA - avgB;
+          });
+          return comps;
+        }
 
-            // ========= Pattern Encouragement & Guarantees =========
-            function ensurePerBombHasClue(maxPasses = 2) {
-                for (let pass = 0; pass < maxPasses; pass++) {
-                    let changed = false;
-                    for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) {
-                        if (!bombs[r][c]) continue;
-
-                        const hasClueNeighbor = neighbors8(r, c).some(([rr, cc]) =>
-                            !bombs[rr][cc] && solution[rr][cc] === adj[rr][cc]
-                        );
-                        if (hasClueNeighbor) continue;
-
-                        let bestMove = null; let bestScore = -1;
-                        const radiusCells = [];
-                        for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) {
-                            const rr = r + dr, cc = c + dc; if (!inBounds(rr, cc)) continue;
-                            if (!bombs[rr][cc]) radiusCells.push([rr, cc]);
-                        }
-
-                        for (const [rr, cc] of radiusCells) {
-                            bombs[r][c] = false; bombs[rr][cc] = true;
-                            const newAdj = computeAdj(bombs);
-
-                            const ok = neighbors8(rr, cc).some(([ar, ac]) =>
-                                !bombs[ar][ac] && solution[ar][ac] === newAdj[ar][ac]
-                            );
-
-                            let score = 0;
-                            for (let i = 0; i < SIDE; i++) for (let j = 0; j < SIDE; j++)
-                                if (!bombs[i][j] && solution[i][j] === newAdj[i][j]) score++;
-
-                            bombs[r][c] = true; bombs[rr][cc] = false;
-
-                            if (ok && score > bestScore) { bestScore = score; bestMove = [rr, cc]; }
-                        }
-
-                        if (bestMove) {
-                            const [nr, nc] = bestMove;
-                            bombs[r][c] = false; bombs[nr][nc] = true;
-                            adj = computeAdj(bombs);
-                            changed = true;
-                        }
-                    }
-                    if (!changed) break;
+        function pickAnchoredBlock() {
+          const blocks = [];
+          for (let br = 0; br < 3; br++)
+            for (let bc = 0; bc < 3; bc++) {
+              let sumAdj = 0,
+                count = 0,
+                safeCount = 0;
+              for (let r = br * 3; r < br * 3 + 3; r++)
+                for (let c = bc * 3; c < bc * 3 + 3; c++) {
+                  sumAdj += adj[r][c];
+                  count++;
+                  if (!bombs[r][c]) safeCount++;
                 }
+              const avgAdj = sumAdj / count;
+              blocks.push({ br, bc, avgAdj, safeCount });
+            }
+          blocks.sort(
+            (a, b) => a.avgAdj - b.avgAdj || b.safeCount - a.safeCount
+          );
+          const candidates = blocks.slice(0, Math.min(3, blocks.length));
+          return candidates[randInt(candidates.length)];
+        }
+
+        function chooseGivensPatterned(conf) {
+          const {
+            targetStartClues,
+            targetStartGivens,
+            maxAdjStart,
+            spreadRows,
+            spreadBlocks,
+          } = conf;
+
+          // mask of revealed-at-start tiles
+          const g = Array.from({ length: SIDE }, () => Array(SIDE).fill(false));
+
+          // partition tiles
+          const clues = [],
+            normals = [];
+          for (let r = 0; r < SIDE; r++)
+            for (let c = 0; c < SIDE; c++) {
+              if (bombs[r][c]) continue;
+              (solution[r][c] === adj[r][c] ? clues : normals).push([r, c]);
             }
 
-            function clusterClues() {
-                const isClue = (r, c) => !bombs[r][c] && solution[r][c] === adj[r][c];
-                const seen = Array.from({ length: SIDE }, _ => Array(SIDE).fill(false));
-                const comps = [];
+          // Sorting: prefer easier clues (low adj); slight shuffle normals
+          clues.sort((a, b) => adj[a[0]][a[1]] - adj[b[0]][b[1]]);
+          shuffle(normals);
 
-                for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) {
-                    if (seen[r][c] || !isClue(r, c)) continue;
-                    const comp = []; const q = [[r, c]]; seen[r][c] = true;
-                    while (q.length) {
-                        const [x, y] = q.shift(); comp.push([x, y]);
-                        for (const [nx, ny] of neighbors8(x, y)) {
-                            if (!seen[nx][ny] && isClue(nx, ny)) { seen[nx][ny] = true; q.push([nx, ny]); }
-                        }
-                    }
-                    comps.push(comp);
-                }
-                comps.sort((A, B) => {
-                    const avgA = A.reduce((s, [r, c]) => s + adj[r][c], 0) / A.length;
-                    const avgB = B.reduce((s, [r, c]) => s + adj[r][c], 0) / B.length;
-                    return (B.length - A.length) || (avgA - avgB);
-                });
-                return comps;
+          // Spread controls
+          const rowsCovered = new Set();
+          const blocksCovered = new Set();
+          const blockKey = (r, c) =>
+            `${Math.floor(r / 3)}-${Math.floor(c / 3)}`;
+
+          // HARD CAP per 3×3 block so starts spread: ~uniform quota with a little slack
+          const totalStart = targetStartGivens;
+          const perBlockCap = Math.max(1, Math.ceil(totalStart / 9)); // e.g. 4–8 typically
+          const blockCounts = new Map(); // key -> count
+
+          const mark = (r, c) => {
+            if (g[r][c]) return false;
+            const bk = blockKey(r, c);
+            const cur = blockCounts.get(bk) || 0;
+            if (cur >= perBlockCap) return false; // block full, try another spot
+
+            g[r][c] = true;
+            blockCounts.set(bk, cur + 1);
+            rowsCovered.add(r);
+            blocksCovered.add(bk);
+            return true;
+          };
+
+          const hasRevealedNeighbor = (r, c) =>
+            neighbors8(r, c).some(([rr, cc]) => g[rr][cc]);
+
+          let clueRevealed = 0,
+            totalRevealed = 0;
+
+          // Candidate generator for clues: spread first across rows/blocks & low-adj
+          function* clueCandidates() {
+            for (const [r, c] of clues)
+              if (
+                (!spreadRows ||
+                  !rowsCovered.has(r) ||
+                  !spreadBlocks ||
+                  !blocksCovered.has(blockKey(r, c))) &&
+                adj[r][c] <= maxAdjStart
+              )
+                yield [r, c];
+
+            for (const [r, c] of clues)
+              if (adj[r][c] <= maxAdjStart) yield [r, c];
+
+            for (const rc of clues) yield rc;
+          }
+
+          // Helper: pick a NORMAL neighbor supporter near (r,c) that also respects per-block cap
+          function pickSupporterNormal(r, c) {
+            const neigh = neighbors8(r, c).filter(
+              ([rr, cc]) =>
+                !bombs[rr][cc] && !g[rr][cc] && solution[rr][cc] !== adj[rr][cc]
+            );
+            if (!neigh.length) return null;
+
+            // Prefer spreading
+            const pref = neigh.filter(
+              ([rr, cc]) =>
+                !spreadRows ||
+                !rowsCovered.has(rr) ||
+                !spreadBlocks ||
+                !blocksCovered.has(blockKey(rr, cc))
+            );
+            const pool = (pref.length ? pref : neigh).filter(
+              ([rr, cc]) =>
+                (blockCounts.get(blockKey(rr, cc)) || 0) < perBlockCap
+            );
+
+            if (!pool.length) return null;
+            return pool[randInt(pool.length)];
+          }
+
+          // Pass 1: seed clues with guaranteed adjacent normal supporter
+          for (const [r, c] of clueCandidates()) {
+            if (
+              clueRevealed >= targetStartClues ||
+              totalRevealed >= targetStartGivens
+            )
+              break;
+            if (g[r][c]) continue;
+
+            // If there is already a revealed neighbor, we can place the clue alone.
+            // Otherwise, we must pair it with a NORMAL neighbor.
+            if (hasRevealedNeighbor(r, c)) {
+              if (mark(r, c)) {
+                clueRevealed++;
+                totalRevealed++;
+              }
+              continue;
             }
 
-            function pickAnchoredBlock() {
-                const blocks = [];
-                for (let br = 0; br < 3; br++)for (let bc = 0; bc < 3; bc++) {
-                    let sumAdj = 0, count = 0, safeCount = 0;
-                    for (let r = br * 3; r < br * 3 + 3; r++)
-                        for (let c = bc * 3; c < bc * 3 + 3; c++) {
-                            sumAdj += adj[r][c]; count++;
-                            if (!bombs[r][c]) safeCount++;
-                        }
-                    const avgAdj = sumAdj / count;
-                    blocks.push({ br, bc, avgAdj, safeCount });
-                }
-                blocks.sort((a, b) => (a.avgAdj - b.avgAdj) || (b.safeCount - a.safeCount));
-                const candidates = blocks.slice(0, Math.min(3, blocks.length));
-                return candidates[randInt(candidates.length)];
+            const supporter = pickSupporterNormal(r, c);
+            if (!supporter) continue; // skip this clue if we can't guarantee a normal neighbor
+
+            // Place clue first, then supporter (respect totals)
+            if (totalRevealed < targetStartGivens && mark(r, c)) {
+              clueRevealed++;
+              totalRevealed++;
             }
+            if (totalRevealed < targetStartGivens) {
+              const [sr, sc] = supporter;
+              if (mark(sr, sc)) totalRevealed++;
+            }
+          }
 
-            function chooseGivensPatterned(conf) {
-                const { anchors, targetStartClues, targetStartGivens, maxAdjStart, spreadRows, spreadBlocks } = conf;
-                const g = Array.from({ length: SIDE }, _ => Array(SIDE).fill(false));
-
-                const clues = [], normals = [];
-                for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) {
-                    if (!bombs[r][c] && solution[r][c] === adj[r][c]) clues.push([r, c]);
-                    else if (!bombs[r][c]) normals.push([r, c]);
+          // Pass 2: top up clues (still guaranteeing adjacency; fallback to pairing)
+          if (
+            clueRevealed < targetStartClues &&
+            totalRevealed < targetStartGivens
+          ) {
+            const remaining = clues.filter(([r, c]) => !g[r][c]);
+            for (const [r, c] of remaining) {
+              if (
+                clueRevealed >= targetStartClues ||
+                totalRevealed >= targetStartGivens
+              )
+                break;
+              if (hasRevealedNeighbor(r, c)) {
+                if (mark(r, c)) {
+                  clueRevealed++;
+                  totalRevealed++;
                 }
-                clues.sort((a, b) => adj[a[0]][a[1]] - adj[b[0]][b[1]]);
-                shuffle(normals);
-
-                const { br, bc } = pickAnchoredBlock();
-                let anchorsPlaced = 0;
-
-                // anchor clues first
-                for (const [r, c] of clues) {
-                    if (anchorsPlaced >= anchors) break;
-                    if (Math.floor(r / 3) === br && Math.floor(c / 3) === bc && adj[r][c] <= maxAdjStart) {
-                        g[r][c] = true; anchorsPlaced++;
-                    }
+              } else {
+                const supporter = pickSupporterNormal(r, c);
+                if (!supporter) continue;
+                if (totalRevealed < targetStartGivens && mark(r, c)) {
+                  clueRevealed++;
+                  totalRevealed++;
                 }
-                // fill anchors with normals if needed
-                for (const [r, c] of normals) {
-                    if (anchorsPlaced >= anchors) break;
-                    if (Math.floor(r / 3) === br && Math.floor(c / 3) === bc && !g[r][c]) {
-                        g[r][c] = true; anchorsPlaced++;
-                    }
-                }
-
-                // reveal whole clue clusters (largest first)
-                const comps = clusterClues();
-                let clueRevealed = 0, totalRevealed = anchorsPlaced;
-                for (const comp of comps) {
-                    if (clueRevealed >= targetStartClues || totalRevealed >= targetStartGivens) break;
-                    for (const [r, c] of comp) {
-                        if (clueRevealed >= targetStartClues || totalRevealed >= targetStartGivens) break;
-                        if (!g[r][c]) { g[r][c] = true; clueRevealed++; totalRevealed++; }
-                    }
-                }
-
-                // spread by rows/blocks if needed
-                const rowsCovered = new Set(), blocksCovered = new Set();
-                for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) if (g[r][c]) {
-                    rowsCovered.add(r);
-                    blocksCovered.add(`${Math.floor(r / 3)}-${Math.floor(c / 3)}`);
-                }
-                const blockKey = (r, c) => `${Math.floor(r / 3)}-${Math.floor(c / 3)}`;
-
-                for (const [r, c] of clues) {
-                    if (totalRevealed >= targetStartGivens) break;
-                    const wantRow = spreadRows && !rowsCovered.has(r);
-                    const wantBlock = spreadBlocks && !blocksCovered.has(blockKey(r, c));
-                    const lowAdj = adj[r][c] <= maxAdjStart;
-                    if ((wantRow || wantBlock) && lowAdj && !g[r][c]) {
-                        g[r][c] = true; totalRevealed++; rowsCovered.add(r); blocksCovered.add(blockKey(r, c));
-                        clueRevealed++;
-                    }
-                }
-                for (const [r, c] of normals) {
-                    if (totalRevealed >= targetStartGivens) break;
-                    const wantRow = spreadRows && !rowsCovered.has(r);
-                    const wantBlock = spreadBlocks && !blocksCovered.has(blockKey(r, c));
-                    if ((wantRow || wantBlock) && !g[r][c]) {
-                        g[r][c] = true; totalRevealed++; rowsCovered.add(r); blocksCovered.add(blockKey(r, c));
-                    }
-                }
-
-                // --- Final top-up to guarantee targets ---
-                const lowAdjClues = clues
-                    .filter(([r, c]) => !g[r][c])
-                    .sort((a, b) => adj[a[0]][a[1]] - adj[b[0]][b[1]]);
-
-                for (const [r, c] of lowAdjClues) {
-                    if (clueRevealed >= targetStartClues || totalRevealed >= targetStartGivens) break;
-                    g[r][c] = true; clueRevealed++; totalRevealed++;
-                }
-
                 if (totalRevealed < targetStartGivens) {
-                    const lowAdjNormals = normals
-                        .filter(([r, c]) => !g[r][c])
-                        .sort((a, b) => adj[a[0]][a[1]] - adj[b[0]][b[1]]);
+                  const [sr, sc] = supporter;
+                  if (mark(sr, sc)) totalRevealed++;
+                }
+              }
+            }
+          }
 
-                    for (const [r, c] of lowAdjNormals) {
-                        if (totalRevealed >= targetStartGivens) break;
-                        g[r][c] = true; totalRevealed++;
+          // Pass 3: fill remainder with normals, spread first, honoring per-block caps
+          if (totalRevealed < targetStartGivens) {
+            const pref = normals.filter(
+              ([r, c]) =>
+                !g[r][c] &&
+                (!spreadRows ||
+                  !rowsCovered.has(r) ||
+                  !spreadBlocks ||
+                  !blocksCovered.has(blockKey(r, c)))
+            );
+            const rest = normals.filter(
+              ([r, c]) =>
+                !g[r][c] && !pref.some(([rr, cc]) => rr === r && cc === c)
+            );
+
+            for (const pool of [pref, rest]) {
+              for (const [r, c] of pool) {
+                if (totalRevealed >= targetStartGivens) break;
+                if (mark(r, c)) totalRevealed++;
+              }
+              if (totalRevealed >= targetStartGivens) break;
+            }
+          }
+
+          // Return the mask; no anchor info anymore
+          return { g };
+        }
+
+        // reject boards that force guessing at start (simple logic pass)
+        function passesSimpleLogicTest(
+          givenMask,
+          maxSteps = 120,
+          minProgress = 10
+        ) {
+          // covered/flag state (simulated)
+          const cov = Array.from({ length: SIDE }, (_) =>
+            Array(SIDE).fill(true)
+          );
+          const flag = Array.from({ length: SIDE }, (_) =>
+            Array(SIDE).fill(false)
+          );
+
+          for (let r = 0; r < SIDE; r++)
+            for (let c = 0; c < SIDE; c++)
+              if (givenMask[r][c]) cov[r][c] = false;
+
+          let progressed = 0,
+            steps = 0;
+
+          const blockIndex = (r, c) => [Math.floor(r / 3), Math.floor(c / 3)];
+
+          while (steps++ < maxSteps) {
+            let changed = false;
+
+            // --- Minesweeper basic rules + twins (exact-k) ---
+            for (let r = 0; r < SIDE; r++)
+              for (let c = 0; c < SIDE; c++) {
+                if (cov[r][c]) continue;
+                const isClue = solution[r][c] === adj[r][c];
+                if (!isClue) continue;
+
+                const neigh = neighbors8(r, c);
+                const covered = [];
+                let flaggedCnt = 0;
+                for (const [rr, cc] of neigh) {
+                  if (flag[rr][cc]) flaggedCnt++;
+                  if (cov[rr][cc] && !flag[rr][cc]) covered.push([rr, cc]);
+                }
+                const need = adj[r][c] - flaggedCnt;
+
+                // exact-k -> all covered must be bombs
+                if (need > 0 && covered.length === need) {
+                  for (const [rr, cc] of covered) {
+                    if (!flag[rr][cc]) {
+                      flag[rr][cc] = true;
+                      changed = true;
+                      progressed++;
                     }
+                  }
                 }
-
-                return { g, anchorBlock: { br, bc, anchorsPlaced } };
-            }
-
-            // reject boards that force guessing at start (simple logic pass)
-            function passesSimpleLogicTest(givenMask, maxSteps = 50) {
-                const cov = Array.from({ length: SIDE }, _ => Array(SIDE).fill(true));
-                const flag = Array.from({ length: SIDE }, _ => Array(SIDE).fill(false));
-                for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) if (givenMask[r][c]) cov[r][c] = false;
-
-                let progressed = false;
-                let steps = 0;
-
-                while (steps < maxSteps) {
-                    steps++;
-                    let changed = false;
-
-                    // Minesweeper basics
-                    for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) {
-                        if (cov[r][c]) continue;
-                        const isClue = (solution[r][c] === adj[r][c]);
-                        if (!isClue) continue;
-                        const neigh = neighbors8(r, c);
-                        const covered = neigh.filter(([rr, cc]) => cov[rr][cc] && !flag[rr][cc]);
-                        const flagged = neigh.filter(([rr, cc]) => flag[rr][cc]).length;
-                        const need = adj[r][c] - flagged;
-
-                        if (covered.length > 0 && covered.length === need && need > 0) {
-                            for (const [rr, cc] of covered) { flag[rr][cc] = true; changed = true; progressed = true; }
-                        }
-                        if (covered.length > 0 && flagged === adj[r][c]) {
-                            for (const [rr, cc] of covered) { cov[rr][cc] = false; changed = true; progressed = true; }
-                        }
+                // all bombs already flagged -> the rest are safe
+                if (covered.length > 0 && flaggedCnt === adj[r][c]) {
+                  for (const [rr, cc] of covered) {
+                    if (cov[rr][cc]) {
+                      cov[rr][cc] = false;
+                      changed = true;
+                      progressed++;
                     }
+                  }
+                }
+              }
 
-                    // Lightweight Sudoku singles
-                    for (let r = 0; r < SIDE; r++) {
-                        const usedRow = new Set();
-                        for (let c = 0; c < SIDE; c++) if (!cov[r][c] && !bombs[r][c]) usedRow.add(solution[r][c]);
-                        for (let c = 0; c < SIDE; c++) {
-                            if (cov[r][c]) {
-                                if (usedRow.has(solution[r][c])) continue;
-                                const usedC = new Set();
-                                for (let rr = 0; rr < SIDE; rr++) if (!cov[rr][c] && !bombs[rr][c]) usedC.add(solution[rr][c]);
-                                if (usedC.has(solution[r][c])) continue;
+            // --- Sudoku hidden singles in rows/cols ---
+            for (let r = 0; r < SIDE; r++) {
+              // reveal any covered non-bomb cell that is the only place its digit can go in the row
+              const needed = new Map();
+              for (let c = 0; c < SIDE; c++)
+                if (!cov[r][c] && !bombs[r][c])
+                  needed.set(solution[r][c], true);
+              for (let d = 1; d <= 9; d++) {
+                if (needed.has(d)) continue;
+                const spots = [];
+                for (let c = 0; c < SIDE; c++)
+                  if (cov[r][c] && !bombs[r][c] && solution[r][c] === d)
+                    spots.push([r, c]);
+                if (spots.length === 1) {
+                  const [rr, cc] = spots[0];
+                  if (cov[rr][cc]) {
+                    cov[rr][cc] = false;
+                    changed = true;
+                    progressed++;
+                  }
+                }
+              }
+            }
+            for (let c = 0; c < SIDE; c++) {
+              const needed = new Map();
+              for (let r = 0; r < SIDE; r++)
+                if (!cov[r][c] && !bombs[r][c])
+                  needed.set(solution[r][c], true);
+              for (let d = 1; d <= 9; d++) {
+                if (needed.has(d)) continue;
+                const spots = [];
+                for (let r = 0; r < SIDE; r++)
+                  if (cov[r][c] && !bombs[r][c] && solution[r][c] === d)
+                    spots.push([r, c]);
+                if (spots.length === 1) {
+                  const [rr, cc] = spots[0];
+                  if (cov[rr][cc]) {
+                    cov[rr][cc] = false;
+                    changed = true;
+                    progressed++;
+                  }
+                }
+              }
+            }
 
-                                let rowHasOther = false;
-                                for (let cc = 0; cc < SIDE; cc++) {
-                                    if (cc === c) continue;
-                                    if (cov[r][cc] && !bombs[r][cc] && solution[r][cc] === solution[r][c]) { rowHasOther = true; break; }
-                                }
-                                if (!rowHasOther) { cov[r][c] = false; changed = true; progressed = true; }
-                            }
-                        }
+            // --- Sudoku hidden single in 3x3 block ---
+            for (let br = 0; br < 3; br++)
+              for (let bc = 0; bc < 3; bc++) {
+                for (let d = 1; d <= 9; d++) {
+                  // if digit d already revealed somewhere in the block, skip
+                  let present = false;
+                  for (let r = br * 3; r < br * 3 + 3; r++)
+                    for (let c = bc * 3; c < bc * 3 + 3; c++)
+                      if (!cov[r][c] && !bombs[r][c] && solution[r][c] === d)
+                        present = true;
+                  if (present) continue;
+
+                  const spots = [];
+                  for (let r = br * 3; r < br * 3 + 3; r++)
+                    for (let c = bc * 3; c < bc * 3 + 3; c++)
+                      if (cov[r][c] && !bombs[r][c] && solution[r][c] === d)
+                        spots.push([r, c]);
+
+                  if (spots.length === 1) {
+                    const [rr, cc] = spots[0];
+                    if (cov[rr][cc]) {
+                      cov[rr][cc] = false;
+                      changed = true;
+                      progressed++;
                     }
+                  }
+                }
+              }
 
-                    if (!changed) break;
-                }
-                return progressed;
-            }
+            if (!changed) break;
+          }
 
-            // ========= Render & Core Game =========
-            function renderLives() {
-                livesEl.innerHTML = "";
-                const maxL = getActiveConfig().lives;
-                for (let i = 0; i < maxL; i++) {
-                    const h = document.createElement('div');
-                    h.className = "heart" + (i < lives ? " on" : "");
-                    livesEl.appendChild(h);
-                }
-            }
-            function setStatus(msg, cls) { statusEl.className = "status " + (cls || ""); statusEl.textContent = msg; }
-            function updateStats() {
-                const notFlagged = bombsTotal - countCorrectFlags();
-                bombsLeftEl.textContent = String(Math.max(0, notFlagged));
-                flagsCntEl.textContent = String(flagsCount);
-            }
-            function countCorrectFlags() {
-                let ok = 0;
-                for (let r = 0; r < SIDE; r++)for (let c = 0; c < SIDE; c++)
-                    if (bombs[r][c] && flagged[r][c]) ok++;
-                return ok;
-            }
-            function isWin() {
-                for (let r = 0; r < SIDE; r++)for (let c = 0; c < SIDE; c++) {
-                    if (bombs[r][c] && !flagged[r][c]) return false;
-                    if (!bombs[r][c] && !revealed[r][c]) return false;
-                }
-                return true;
-            }
-            function loseLife() {
-                lives--; renderLives();
-                if (lives <= 0) endGame(false, "No lives left.");
-            }
-            function endGame(win, msg) {
-                gameOver = true;
-                if (win) { setStatus("You win! " + (msg || ""), "win"); }
-                else {
-                    for (let r = 0; r < SIDE; r++)for (let c = 0; c < SIDE; c++) if (bombs[r][c]) revealed[r][c] = true;
-                    renderBoard();
-                    setStatus("You lose! " + (msg || ""), "lose");
-                }
-            }
+          // Accept only boards where we could make a decent number of logic moves
+          return progressed >= minProgress;
+        }
 
-            function renderBoard() {
-                boardEl.innerHTML = "";
-                for (let r = 0; r < SIDE; r++)for (let c = 0; c < SIDE; c++) {
-                    const div = document.createElement('div');
-                    div.className = "cell"; div.dataset.r = r; div.dataset.c = c;
-                    if (r % 3 === 0 && c % 3 === 0) { const sg = document.createElement('div'); sg.className = 'subgrid'; div.appendChild(sg); }
-                    const isRev = revealed[r][c], isFlag = flagged[r][c], type = tileType(r, c);
-                    if (isRev) {
-                        div.classList.add("revealed", type);
-                        if (type === "bomb") {
-                            const m = document.createElement('div'); m.className = "bombmark"; m.textContent = "💣"; div.appendChild(m);
-                        } else {
-                            div.textContent = solution[r][c];
-                            if (given[r][c]) div.classList.add("given");
-                        }
-                    } else {
-                        div.classList.add("covered");
-                        if (isFlag) {
-                            div.classList.add("flag");
-                            const note = flagNote[r]?.[c];
-                            if (note) { const big = document.createElement('div'); big.className = 'flagDigit'; big.textContent = note; div.appendChild(big); }
-                        }
+        // ========= Render & Core Game =========
+        // ---- helpers: precise board metrics (inner grid origin)
+        function getBoardMetrics() {
+          const wrapRect = boardWrapEl.getBoundingClientRect();
+          const boardRect = boardEl.getBoundingClientRect();
+          const cs = getComputedStyle(boardEl);
+
+          const padL = parseFloat(cs.paddingLeft);
+          const padT = parseFloat(cs.paddingTop);
+          const padR = parseFloat(cs.paddingRight);
+          const padB = parseFloat(cs.paddingBottom);
+
+          // the actual drawable grid area (inside the board’s padding)
+          const innerW = boardRect.width - padL - padR;
+          const innerH = boardRect.height - padT - padB;
+
+          // top-left pixel of cell (0,0) relative to the wrapper
+          const originX = boardRect.left - wrapRect.left + padL;
+          const originY = boardRect.top - wrapRect.top + padT;
+
+          const cellW = innerW / SIDE;
+          const cellH = innerH / SIDE;
+
+          return { originX, originY, innerW, innerH, cellW, cellH };
+        }
+
+        // ---- overlay renderer (row/col badges)
+        function renderRowColHintsOverlay() {
+          const rowEl = document.getElementById("rowHintsOverlay");
+          const colEl = document.getElementById("colHintsOverlay");
+          rowEl.innerHTML = "";
+          colEl.innerHTML = "";
+
+          const { originX, originY, cellW, cellH } = getBoardMetrics();
+
+          // ROW badges (left gutter)
+          hintedRows.forEach((r) => {
+            const badge = document.createElement("div");
+            badge.className = "gutRow";
+            badge.style.left = "8px"; // fixed gutter inset
+            badge.style.top = originY + (r + 0.5) * cellH + "px";
+            badge.textContent = `💣 ${rowTotals[r]}`;
+            badge.addEventListener("mouseenter", () => showRowHL(r));
+            badge.addEventListener("mouseleave", hideHL);
+            rowEl.appendChild(badge);
+          });
+
+          // COL badges (top gutter)
+          hintedCols.forEach((c) => {
+            const badge = document.createElement("div");
+            badge.className = "gutCol";
+            badge.style.top = "8px"; // fixed gutter inset
+            badge.style.left = originX + (c + 0.5) * cellW + "px";
+            badge.textContent = `💣 ${colTotals[c]}`;
+            badge.addEventListener("mouseenter", () => showColHL(c));
+            badge.addEventListener("mouseleave", hideHL);
+            colEl.appendChild(badge);
+          });
+        }
+
+        function rowHotScore(r) {
+          let la = 0;
+          for (let c = 0; c < SIDE; c++) {
+            if (!bombs[r][c] && solution[r][c] === adj[r][c] && adj[r][c] <= 2)
+              la++;
+          }
+          return la;
+        }
+
+        function colHotScore(c) {
+          let la = 0;
+          for (let r = 0; r < SIDE; r++) {
+            if (!bombs[r][c] && solution[r][c] === adj[r][c] && adj[r][c] <= 2)
+              la++;
+          }
+          return la;
+        }
+
+        function renderLives() {
+          livesEl.innerHTML = "";
+          const maxL = getActiveConfig().lives;
+          for (let i = 0; i < maxL; i++) {
+            const h = document.createElement("div");
+            h.className = "heart" + (i < lives ? " on" : "");
+            livesEl.appendChild(h);
+          }
+        }
+        function setStatus(msg, cls) {
+          statusEl.className = "status " + (cls || "");
+          statusEl.textContent = msg;
+        }
+        function updateStats() {
+          const notFlagged = bombsTotal - countCorrectFlags();
+          bombsLeftEl.textContent = "💣 " + String(Math.max(0, notFlagged));
+          flagsCntEl.textContent = String(flagsCount);
+        }
+        function countCorrectFlags() {
+          let ok = 0;
+          for (let r = 0; r < SIDE; r++)
+            for (let c = 0; c < SIDE; c++)
+              if (bombs[r][c] && flagged[r][c]) ok++;
+          return ok;
+        }
+        function isWin() {
+          for (let r = 0; r < SIDE; r++)
+            for (let c = 0; c < SIDE; c++) {
+              if (bombs[r][c] && !flagged[r][c]) return false;
+              if (!bombs[r][c] && !revealed[r][c]) return false;
+            }
+          return true;
+        }
+        function loseLife() {
+          lives--;
+          renderLives();
+          if (lives <= 0) endGame(false, "No lives left.");
+        }
+        function endGame(win, msg) {
+          gameOver = true;
+          didWin = !!win;
+          if (win) {
+            setStatus("You win! " + (msg || ""), "win");
+            document.getElementById("reviewBtn").style.display = "none";
+          } else {
+            // don't auto-reveal; we’ll let Review show everything with color-coding
+            setStatus("You lose! " + (msg || ""), "lose");
+            document.getElementById("reviewBtn").style.display = "inline-block";
+          }
+          renderBoard();
+        }
+
+        function renderBoard() {
+          boardEl.innerHTML = "";
+          for (let r = 0; r < SIDE; r++)
+            for (let c = 0; c < SIDE; c++) {
+              const div = document.createElement("div");
+              div.className = "cell";
+              div.dataset.r = r;
+              div.dataset.c = c;
+              if (r % 3 === 0 && c % 3 === 0) {
+                const sg = document.createElement("div");
+                sg.className = "subgrid";
+                div.appendChild(sg);
+              }
+              const isRev = revealed[r][c],
+                isFlag = flagged[r][c],
+                type = tileType(r, c);
+              // Post-loss review overlay
+              if (reviewMode) {
+                // Show everything
+                if (!isRev) {
+                  // Display underlying solution/bomb with different colors
+                  if (bombs[r][c]) {
+                    div.classList.add("postHiddenBomb");
+                    const m = document.createElement("div");
+                    m.className = "bombmark";
+                    m.textContent = "💣";
+                    div.appendChild(m);
+                  } else {
+                    const isClue = solution[r][c] === adj[r][c];
+                    div.classList.add(
+                      isClue ? "postHiddenClue" : "postHiddenSafe"
+                    );
+                    div.textContent = solution[r][c];
+                  }
+                }
+
+                // Flag correctness overlays
+                if (isFlag) {
+                  if (bombs[r][c]) {
+                    div.classList.add("flagRight");
+                    // If user placed a digit note on a bomb, mark as "note on bomb" (neutral)
+                    const note = flagNote[r]?.[c];
+                    if (note != null) div.classList.add("flagDigitNoteOnBomb");
+                  } else {
+                    div.classList.add("flagWrong");
+                    // Wrong digit on a safe tile (flag note != true solution)
+                    const note = flagNote[r]?.[c];
+                    if (note != null && note !== solution[r][c]) {
+                      div.classList.add("flagDigitWrong");
                     }
-                    div.addEventListener('mousedown', onMouseDownCell);
-                    div.addEventListener('touchstart', onTouchCell, { passive: false });
-                    boardEl.appendChild(div);
+                  }
                 }
-                highlightSelected();
-                updateRemoveFlagButton();
-            }
-            function renderCell(r, c) {
-                const idx = r * SIDE + c, div = boardEl.children[idx]; if (!div) return;
+              }
 
-                // clear old children (e.g., previous flagDigit)
-                div.innerHTML = "";
-
-                div.className = "cell"; div.dataset.r = r; div.dataset.c = c;
-                if (r % 3 === 0 && c % 3 === 0) { const sg = document.createElement('div'); sg.className = 'subgrid'; div.appendChild(sg); }
-                const isRev = revealed[r][c], isFlag = flagged[r][c], type = tileType(r, c);
-                if (isRev) {
-                    div.classList.add("revealed", type);
-                    if (type === "bomb") {
-                        const m = document.createElement('div'); m.className = "bombmark"; m.textContent = "💣"; div.appendChild(m);
-                    } else {
-                        div.textContent = solution[r][c];
-                        if (given[r][c]) div.classList.add("given");
-                    }
+              if (isRev) {
+                div.classList.add("revealed", type);
+                if (type === "bomb") {
+                  const m = document.createElement("div");
+                  m.className = "bombmark";
+                  m.textContent = "💣";
+                  div.appendChild(m);
                 } else {
-                    div.classList.add("covered");
-                    if (isFlag) {
-                        div.classList.add("flag");
-                        const note = flagNote[r]?.[c];
-                        if (note) { const big = document.createElement('div'); big.className = 'flagDigit'; big.textContent = note; div.appendChild(big); }
-                    }
+                  div.textContent = solution[r][c];
+                  if (given[r][c]) div.classList.add("given");
                 }
-                updateRemoveFlagButton();
+              } else {
+                div.classList.add("covered");
+                if (isFlag) {
+                  div.classList.add("flag");
+                  const note = flagNote[r]?.[c];
+                  if (note) {
+                    const big = document.createElement("div");
+                    big.className = "flagDigit";
+                    big.textContent = note;
+                    div.appendChild(big);
+                  }
+                }
+              }
+              div.addEventListener("mousedown", onMouseDownCell);
+              div.addEventListener("touchstart", onTouchCell, {
+                passive: false,
+              });
+              boardEl.appendChild(div);
+            }
+          highlightSelected();
+          updateRemoveFlagButton();
+          requestAnimationFrame(renderRowColHintsOverlay);
+        }
+        function renderCell(r, c) {
+          const idx = r * SIDE + c,
+            div = boardEl.children[idx];
+          if (!div) return;
+
+          // clear old children (e.g., previous flagDigit)
+          div.innerHTML = "";
+
+          div.className = "cell";
+          div.dataset.r = r;
+          div.dataset.c = c;
+          if (r % 3 === 0 && c % 3 === 0) {
+            const sg = document.createElement("div");
+            sg.className = "subgrid";
+            div.appendChild(sg);
+          }
+          const isRev = revealed[r][c],
+            isFlag = flagged[r][c],
+            type = tileType(r, c);
+          // Post-loss review overlay
+          if (reviewMode) {
+            // Show everything
+            if (!isRev) {
+              // Display underlying solution/bomb with different colors
+              if (bombs[r][c]) {
+                div.classList.add("postHiddenBomb");
+                const m = document.createElement("div");
+                m.className = "bombmark";
+                m.textContent = "💣";
+                div.appendChild(m);
+              } else {
+                const isClue = solution[r][c] === adj[r][c];
+                div.classList.add(isClue ? "postHiddenClue" : "postHiddenSafe");
+                div.textContent = solution[r][c];
+              }
             }
 
-            // ========= Selection / Input =========
-            function setSelected(r, c) { if (gameOver) return; selected = { r, c }; highlightSelected(); asideHint.textContent = flagMode ? "Flag mode: pick a number then Confirm to place a flag + digit." : "Reveal mode: pick a number then Confirm to reveal."; updateRemoveFlagButton(); }
-            function clearSelected() { selected = null; highlightSelected(); updateRemoveFlagButton(); }
-            function highlightSelected() {
-                for (const ch of boardEl.children) ch.classList.remove('sel');
-                if (!selected) return; const idx = selected.r * SIDE + selected.c; const div = boardEl.children[idx]; if (div) div.classList.add('sel');
-            }
-            function updateRemoveFlagButton() {
-                if (!selected) { removeFlagBtn.disabled = true; return; }
-                const { r, c } = selected;
-                removeFlagBtn.disabled = !flagged[r][c];
-            }
-            function buildNumpad() {
-                numpadEl.innerHTML = "";
-                for (let n = 1; n <= 9; n++) {
-                    const b = document.createElement('button'); b.textContent = n;
-                    b.addEventListener('click', () => {
-                        pickedDigit = n;
-                        for (const btn of numpadEl.children) btn.classList.remove('sel');
-                        b.classList.add('sel');
-                    });
-                    numpadEl.appendChild(b);
+            // Flag correctness overlays
+            if (isFlag) {
+              if (bombs[r][c]) {
+                div.classList.add("flagRight");
+                // If user placed a digit note on a bomb, mark as "note on bomb" (neutral)
+                const note = flagNote[r]?.[c];
+                if (note != null) div.classList.add("flagDigitNoteOnBomb");
+              } else {
+                div.classList.add("flagWrong");
+                // Wrong digit on a safe tile (flag note != true solution)
+                const note = flagNote[r]?.[c];
+                if (note != null && note !== solution[r][c]) {
+                  div.classList.add("flagDigitWrong");
                 }
+              }
             }
+          }
 
-            // Flag mode toggle
-            flagBtn.addEventListener('click', () => {
-                flagMode = !flagMode;
-                flagBtn.classList.toggle('flagModeOn', flagMode);
-                setStatus(flagMode ? "Flag mode ON: choose a number then Confirm to place flag + digit (no life loss)." : "Reveal mode ON: choose a number then Confirm to reveal.", "hint");
-                asideHint.textContent = flagMode
-                    ? "Flag mode: pick a number → Confirm to place a flag digit (no life loss)."
-                    : "Reveal mode: pick a number → Confirm to reveal; wrong digit costs a life.";
+          if (isRev) {
+            div.classList.add("revealed", type);
+            if (type === "bomb") {
+              const m = document.createElement("div");
+              m.className = "bombmark";
+              m.textContent = "💣";
+              div.appendChild(m);
+            } else {
+              div.textContent = solution[r][c];
+              if (given[r][c]) div.classList.add("given");
+            }
+          } else {
+            div.classList.add("covered");
+            if (isFlag) {
+              div.classList.add("flag");
+              const note = flagNote[r]?.[c];
+              if (note) {
+                const big = document.createElement("div");
+                big.className = "flagDigit";
+                big.textContent = note;
+                div.appendChild(big);
+              }
+            }
+          }
+          updateRemoveFlagButton();
+        }
+
+        // ========= Selection / Input =========
+        function hideHL() {
+          rowHL.style.display = "none";
+          colHL.style.display = "none";
+        }
+
+        // ---- highlight stripes use the same metrics (perfect alignment)
+        function showRowHL(r) {
+          const { originX, originY, innerW, cellH } = getBoardMetrics();
+          rowHL.style.display = "block";
+          rowHL.style.left = originX + "px";
+          rowHL.style.top = originY + r * cellH + "px";
+          rowHL.style.width = innerW + "px";
+          rowHL.style.height = cellH + "px";
+          colHL.style.display = "none";
+        }
+
+        function showColHL(c) {
+          const { originX, originY, innerH, cellW } = getBoardMetrics();
+          colHL.style.display = "block";
+          colHL.style.left = originX + c * cellW + "px";
+          colHL.style.top = originY + "px";
+          colHL.style.width = cellW + "px";
+          colHL.style.height = innerH + "px";
+          rowHL.style.display = "none";
+        }
+
+        function setSelected(r, c) {
+          if (gameOver) return;
+          selected = { r, c };
+          highlightSelected();
+          asideHint.textContent = flagMode
+            ? "Flag mode: pick a number then Confirm to place a flag + digit."
+            : "Reveal mode: pick a number then Confirm to reveal.";
+          updateRemoveFlagButton();
+        }
+        function clearSelected() {
+          selected = null;
+          highlightSelected();
+          updateRemoveFlagButton();
+        }
+        function highlightSelected() {
+          for (const ch of boardEl.children) ch.classList.remove("sel");
+          if (!selected) return;
+          const idx = selected.r * SIDE + selected.c;
+          const div = boardEl.children[idx];
+          if (div) div.classList.add("sel");
+        }
+        function updateRemoveFlagButton() {
+          if (!selected) {
+            removeFlagBtn.disabled = true;
+            return;
+          }
+          const { r, c } = selected;
+          removeFlagBtn.disabled = !flagged[r][c];
+        }
+        function buildNumpad() {
+          numpadEl.innerHTML = "";
+          for (let n = 1; n <= 9; n++) {
+            const b = document.createElement("button");
+            b.textContent = n;
+            b.classList.add("numBtn");
+            b.addEventListener("click", () => {
+              // Toggle: clicking the same number again unselects it
+              if (pickedDigit === n) {
+                pickedDigit = null;
+                updateNumpadSelection();
+              } else {
+                pickedDigit = n;
+                updateNumpadSelection();
+              }
             });
+            numpadEl.appendChild(b);
+          }
+          updateNumpadSelection();
+        }
 
-            // Remove flag on selected
-            removeFlagBtn.addEventListener('click', () => {
-                if (gameOver || !selected) return;
-                const { r, c } = selected;
-                if (!flagged[r][c]) return;
-                flagged[r][c] = false;
-                if (flagNote[r]) flagNote[r][c] = null;
-                flagsCount = Math.max(0, flagsCount - 1);
-                renderCell(r, c); updateStats();
-                setStatus("Flag removed.", "hint");
-            });
+        function updateNumpadSelection() {
+          const btns = numpadEl.querySelectorAll(".numBtn");
+          btns.forEach((btn) => btn.classList.remove("sel"));
+          if (pickedDigit != null) {
+            const idx = pickedDigit - 1;
+            if (btns[idx]) btns[idx].classList.add("sel");
+          }
+        }
 
-            // Confirm action: flag mode vs reveal mode
-            confirmBtn.addEventListener('click', () => {
-                if (gameOver) return;
-                if (!selected) { setStatus("Select a covered tile first.", "lose"); return; }
-                const { r, c } = selected;
+        // Flag mode toggle
+        flagBtn.addEventListener("click", () => {
+          flagMode = !flagMode;
+          flagBtn.classList.toggle("flagModeOn", flagMode);
+          setStatus(
+            flagMode
+              ? "Flag mode ON: choose a number then Confirm to place flag + digit (no life loss)."
+              : "Reveal mode ON: choose a number then Confirm to reveal.",
+            "hint"
+          );
+          asideHint.textContent = flagMode
+            ? "Flag mode: pick a number → Confirm to place a flag digit (no life loss)."
+            : "Reveal mode: pick a number → Confirm to reveal; wrong digit costs a life.";
+        });
 
-                if (revealed[r][c]) { setStatus("Tile already revealed.", "lose"); bumpCell(r, c); return; }
-                if (!pickedDigit) { setStatus("Pick a number 1–9, then Confirm.", "lose"); bumpCell(r, c); return; }
+        // Remove flag on selected
+        removeFlagBtn.addEventListener("click", () => {
+          if (gameOver || !selected) return;
+          const { r, c } = selected;
+          if (!flagged[r][c]) return;
+          flagged[r][c] = false;
+          if (flagNote[r]) flagNote[r][c] = null;
+          flagsCount = Math.max(0, flagsCount - 1);
+          renderCell(r, c);
+          updateStats();
+          if (flagNote[r][c] == null) {
+            pickedDigit = null;
+            updateNumpadSelection();
+          }
+          setStatus("Flag removed.", "hint");
+        });
 
-                if (flagMode) {
-                    if (!flagged[r][c]) { flagged[r][c] = true; flagsCount++; }
-                    if (!flagNote[r]) flagNote[r] = [];
-                    flagNote[r][c] = pickedDigit;
-                    renderCell(r, c); updateStats();
-                    setStatus("Flag placed.", "hint");
-                    if (isWin()) endGame(true, "All bombs flagged & safe tiles revealed!");
-                    return;
-                }
+        // Confirm action: flag mode vs reveal mode
+        confirmBtn.addEventListener("click", () => {
+          if (gameOver) return;
+          if (!selected) {
+            setStatus("Select a covered tile first.", "lose");
+            return;
+          }
+          const { r, c } = selected;
 
-                // Reveal mode
-                if (bombs[r][c]) { endGame(false, "You revealed a bomb."); return; }
-                if (pickedDigit !== solution[r][c]) { loseLife(); if (!gameOver) setStatus(`Wrong digit. Life -1.`, "lose"); return; }
-
-                revealed[r][c] = true; renderCell(r, c);
-                if (isWin()) endGame(true, "All bombs flagged & safe tiles revealed!");
-                else setStatus("Nice! Keep chaining logic from the anchors.");
-            });
-
-            function onMouseDownCell(e) {
-                const t = e.currentTarget; const r = +t.dataset.r, c = +t.dataset.c;
-                if (Number.isNaN(r) || Number.isNaN(c)) return;
-                if (e.button === 2) {
-                    e.preventDefault();
-                    setStatus("Use Flag mode: click ⚑ Flag, pick a number, then Confirm.", "hint");
-                    bumpCell(r, c);
-                    return;
-                }
-                if (!revealed[r][c]) setSelected(r, c); else clearSelected();
+          if (revealed[r][c]) {
+            setStatus("Tile already revealed.", "lose");
+            bumpCell(r, c);
+            return;
+          }
+          if (flagMode) {
+            // Place/update a flag; digit is optional (blank flag allowed)
+            if (!flagged[r][c]) {
+              flagged[r][c] = true;
+              flagsCount++;
             }
+            if (!flagNote[r]) flagNote[r] = [];
+            // If no digit picked, store null = blank flag
+            flagNote[r][c] = pickedDigit ?? null;
+            renderCell(r, c);
+            updateStats();
+            setStatus(
+              flagNote[r][c] == null ? "Blank flag placed." : "Flag placed.",
+              "hint"
+            );
+            if (isWin())
+              endGame(true, "All bombs flagged & safe tiles revealed!");
+            return;
+          }
 
-            function onTouchCell(e) {
-                e.preventDefault();
-                const t = e.currentTarget; const r = +t.dataset.r, c = +t.dataset.c;
-                if (Number.isNaN(r) || Number.isNaN(c)) return;
-                if (!revealed[r][c]) setSelected(r, c); else clearSelected();
-            }
+          // Reveal mode requires a digit
+          if (!pickedDigit) {
+            setStatus("Pick a number 1–9, then Confirm.", "lose");
+            bumpCell(r, c);
+            return;
+          }
 
-            function bumpCell(r, c) {
-                const idx = r * SIDE + c, el = boardEl.children[idx]; if (!el) return;
-                el.classList.add('bad'); setTimeout(() => el.classList.remove('bad'), 200);
-            }
+          // Reveal mode
+          if (bombs[r][c]) {
+            endGame(false, "You revealed a bomb.");
+            return;
+          }
+          if (pickedDigit !== solution[r][c]) {
+            loseLife();
+            if (!gameOver) setStatus(`Wrong digit. Life -1.`, "lose");
+            return;
+          }
 
-            // ========= Mode/Config Helpers =========
-            function loadCustomFromLS() {
-                try {
-                    const raw = localStorage.getItem(LS_KEY);
-                    if (!raw) return;
-                    const cfg = JSON.parse(raw);
-                    PRESETS.custom = Object.assign({}, PRESETS.custom, cfg);
-                } catch { }
+          revealed[r][c] = true;
+          renderCell(r, c);
+          if (isWin())
+            endGame(true, "All bombs flagged & safe tiles revealed!");
+          else setStatus("Nice! Keep chaining logic from the anchors.");
+        });
+
+        function onMouseDownCell(e) {
+          const t = e.currentTarget;
+          const r = +t.dataset.r,
+            c = +t.dataset.c;
+          if (Number.isNaN(r) || Number.isNaN(c)) return;
+          if (e.button === 2) {
+            e.preventDefault();
+            setStatus(
+              "Use Flag mode: click ⚑ Flag, pick a number, then Confirm.",
+              "hint"
+            );
+            bumpCell(r, c);
+            return;
+          }
+          if (!revealed[r][c]) setSelected(r, c);
+          else clearSelected();
+        }
+
+        function onTouchCell(e) {
+          e.preventDefault();
+          const t = e.currentTarget;
+          const r = +t.dataset.r,
+            c = +t.dataset.c;
+          if (Number.isNaN(r) || Number.isNaN(c)) return;
+          if (!revealed[r][c]) setSelected(r, c);
+          else clearSelected();
+        }
+
+        function bumpCell(r, c) {
+          const idx = r * SIDE + c,
+            el = boardEl.children[idx];
+          if (!el) return;
+          el.classList.add("bad");
+          setTimeout(() => el.classList.remove("bad"), 200);
+        }
+
+        function selectRowColHints(cfg) {
+          // Compute totals once and keep them in globals (used by overlay)
+          rowTotals = Array.from({ length: SIDE }, (_, r) =>
+            bombs[r].reduce((s, x) => s + (x ? 1 : 0), 0)
+          );
+          colTotals = Array.from({ length: SIDE }, (_, c) => {
+            let s = 0;
+            for (let r = 0; r < SIDE; r++) if (bombs[r][c]) s++;
+            return s;
+          });
+
+          const lowAdj = (r, c) =>
+            !bombs[r][c] && solution[r][c] === adj[r][c] && adj[r][c] <= 2;
+
+          const rowScore = (r) => {
+            const info = rowTotals[r] === 0 || rowTotals[r] === 9 ? 0 : 1;
+            let la = 0;
+            for (let c = 0; c < SIDE; c++) if (lowAdj(r, c)) la++;
+            return info * 10 + la;
+          };
+
+          const colScore = (c) => {
+            const info = colTotals[c] === 0 || colTotals[c] === 9 ? 0 : 1;
+            let la = 0;
+            for (let r = 0; r < SIDE; r++) if (lowAdj(r, c)) la++;
+            return info * 10 + la;
+          };
+
+          const rowIdx = Array.from({ length: SIDE }, (_, i) => i).sort(
+            (a, b) => rowScore(b) - rowScore(a)
+          );
+          const colIdx = Array.from({ length: SIDE }, (_, i) => i).sort(
+            (a, b) => colScore(b) - colScore(a)
+          );
+
+          function pickSpread(idxs, k) {
+            const chosen = [];
+            for (const i of idxs) {
+              if (chosen.length >= k) break;
+              if (chosen.some((x) => Math.abs(x - i) <= 1)) continue; // avoid neighbors
+              chosen.push(i);
             }
-            function saveCustomToLS() {
-                localStorage.setItem(LS_KEY, JSON.stringify(PRESETS.custom));
+            for (const i of idxs) {
+              if (chosen.length >= k) break;
+              if (!chosen.includes(i)) chosen.push(i);
             }
-            function getActiveConfig() { return Object.assign({}, PRESETS[mode]); }
-            function applyConfigInputsEnabled() {
-                const enable = (mode === "custom");
-                [
-                    cfgLives, cfgBombRatio, cfgAnchors,
-                    cfgStartClues, cfgStartGivens, cfgMaxAdj,
-                    cfgSpreadRows, cfgSpreadBlocks
-                ].forEach(el => el.disabled = !enable);
-                if (enable) { configPanel.open = true; }
-            }
-            function syncInputsFromConfig(cfg) {
-                cfgLives.value = cfg.lives; valLives.textContent = cfg.lives;
-                cfgBombRatio.value = cfg.bombRatio; valBombRatio.textContent = Number(cfg.bombRatio).toFixed(2);
-                cfgAnchors.value = cfg.anchors; valAnchors.textContent = cfg.anchors;
-                cfgStartClues.value = cfg.targetStartClues; valStartClues.textContent = cfg.targetStartClues;
-                cfgStartGivens.value = cfg.targetStartGivens; valStartGivens.textContent = cfg.targetStartGivens;
-                cfgMaxAdj.value = cfg.maxAdjStart; valMaxAdj.textContent = cfg.maxAdjStart;
-                cfgSpreadRows.checked = !!cfg.spreadRows; cfgSpreadBlocks.checked = !!cfg.spreadBlocks;
-            }
-            function syncConfigFromInputs() {
-                PRESETS.custom = {
-                    lives: parseInt(cfgLives.value, 10),
-                    bombRatio: +cfgBombRatio.value,
-                    anchors: parseInt(cfgAnchors.value, 10),
-                    targetStartClues: parseInt(cfgStartClues.value, 10),
-                    targetStartGivens: parseInt(cfgStartGivens.value, 10),
-                    maxAdjStart: parseInt(cfgMaxAdj.value, 10),
-                    spreadRows: !!cfgSpreadRows.checked,
-                    spreadBlocks: !!cfgSpreadBlocks.checked
-                };
-                saveCustomToLS();
-                renderActiveConfigKV();
-            }
-            function renderActiveConfigKV() {
-                const cfg = getActiveConfig();
-                activeConfigEl.textContent =
-                    `mode: ${mode}
+            return chosen.slice(0, k);
+          }
+
+          hintedRows = pickSpread(rowIdx, Math.min(cfg.hintRows || 0, SIDE));
+          hintedCols = pickSpread(colIdx, Math.min(cfg.hintCols || 0, SIDE));
+
+          renderRowColHintsOverlay();
+        }
+
+        // ========= Mode/Config Helpers =========
+        function loadCustomFromLS() {
+          try {
+            const raw = localStorage.getItem(LS_KEY);
+            if (!raw) return;
+            const cfg = JSON.parse(raw);
+            PRESETS.custom = Object.assign({}, PRESETS.custom, cfg);
+          } catch {}
+        }
+        function saveCustomToLS() {
+          localStorage.setItem(LS_KEY, JSON.stringify(PRESETS.custom));
+        }
+        function getActiveConfig() {
+          return Object.assign({}, PRESETS[mode]);
+        }
+        function applyConfigInputsEnabled() {
+          const enable = mode === "custom";
+          [
+            cfgLives,
+            cfgBombRatio,
+            cfgStartClues,
+            cfgStartGivens,
+            cfgMaxAdj,
+            cfgSpreadRows,
+            cfgSpreadBlocks,
+          ].forEach((el) => (el.disabled = !enable));
+          if (enable) {
+            configPanel.open = true;
+          }
+        }
+        function syncInputsFromConfig(cfg) {
+          cfgLives.value = cfg.lives;
+          valLives.textContent = cfg.lives;
+          cfgBombRatio.value = cfg.bombRatio;
+          valBombRatio.textContent = Number(cfg.bombRatio).toFixed(2);
+          cfgStartClues.value = cfg.targetStartClues;
+          valStartClues.textContent = cfg.targetStartClues;
+          cfgStartGivens.value = cfg.targetStartGivens;
+          valStartGivens.textContent = cfg.targetStartGivens;
+          cfgMaxAdj.value = cfg.maxAdjStart;
+          valMaxAdj.textContent = cfg.maxAdjStart;
+          cfgSpreadRows.checked = !!cfg.spreadRows;
+          cfgSpreadBlocks.checked = !!cfg.spreadBlocks;
+        }
+        function syncConfigFromInputs() {
+          PRESETS.custom = {
+            lives: parseInt(cfgLives.value, 10),
+            bombRatio: +cfgBombRatio.value,
+            targetStartClues: parseInt(cfgStartClues.value, 10),
+            targetStartGivens: parseInt(cfgStartGivens.value, 10),
+            maxAdjStart: parseInt(cfgMaxAdj.value, 10),
+            spreadRows: !!cfgSpreadRows.checked,
+            spreadBlocks: !!cfgSpreadBlocks.checked,
+          };
+          saveCustomToLS();
+          renderActiveConfigKV();
+        }
+        function renderActiveConfigKV() {
+          const cfg = getActiveConfig();
+          activeConfigEl.textContent = `mode: ${mode}
 lives: ${cfg.lives}
 bombRatio: ${cfg.bombRatio}
-anchorsInAnchoredDistrict: ${cfg.anchors}
 targetStartClues: ${cfg.targetStartClues}
 targetStartGivens: ${cfg.targetStartGivens}
 maxAdjForStart: ${cfg.maxAdjStart}
 spreadByRows: ${cfg.spreadRows}
-spreadByBlocks: ${cfg.spreadBlocks}
-anchoredBlock(last run): [${lastAnchorInfo.br + 1}, ${lastAnchorInfo.bc + 1}] placed=${lastAnchorInfo.anchorsPlaced}`;
+spreadByBlocks: ${cfg.spreadBlocks}`;
+        }
+
+        function updateConfigInputsUI() {
+          const cfg = getActiveConfig();
+          syncInputsFromConfig(cfg);
+          applyConfigInputsEnabled();
+          renderActiveConfigKV();
+        }
+
+        modeEl.addEventListener("change", () => {
+          mode = modeEl.value;
+          updateConfigInputsUI();
+        });
+
+        [
+          [cfgLives, valLives, (v) => v],
+          [cfgBombRatio, valBombRatio, (v) => (+v).toFixed(2)],
+          [cfgStartClues, valStartClues, (v) => v],
+          [cfgStartGivens, valStartGivens, (v) => v],
+          [cfgMaxAdj, valMaxAdj, (v) => v],
+        ].forEach(([input, label, fmt]) => {
+          input.addEventListener("input", () => {
+            label.textContent = fmt(input.value);
+            if (mode === "custom") {
+              syncConfigFromInputs();
             }
+          });
+        });
+        cfgSpreadRows.addEventListener("change", () => {
+          if (mode === "custom") {
+            syncConfigFromInputs();
+          }
+        });
+        cfgSpreadBlocks.addEventListener("change", () => {
+          if (mode === "custom") {
+            syncConfigFromInputs();
+          }
+        });
 
-            function updateConfigInputsUI() {
-                const cfg = getActiveConfig();
-                syncInputsFromConfig(cfg);
-                applyConfigInputsEnabled();
-                renderActiveConfigKV();
-            }
+        saveCustomBtn.addEventListener("click", () => {
+          syncConfigFromInputs();
+          setStatus("Custom config saved. New Run to apply.", "win");
+        });
+        resetCustomBtn.addEventListener("click", () => {
+          PRESETS.custom = { ...PRESETS.story };
+          syncInputsFromConfig(PRESETS.custom);
+          saveCustomToLS();
+          renderActiveConfigKV();
+          setStatus("Custom config reset to defaults.", "hint");
+        });
 
-            modeEl.addEventListener('change', () => { mode = modeEl.value; updateConfigInputsUI(); });
+        newRunBtn.addEventListener("click", newRun);
 
-            [
-                [cfgLives, valLives, v => v],
-                [cfgBombRatio, valBombRatio, v => (+v).toFixed(2)],
-                [cfgAnchors, valAnchors, v => v],
-                [cfgStartClues, valStartClues, v => v],
-                [cfgStartGivens, valStartGivens, v => v],
-                [cfgMaxAdj, valMaxAdj, v => v],
-            ].forEach(([input, label, fmt]) => {
-                input.addEventListener('input', () => {
-                    label.textContent = fmt(input.value);
-                    if (mode === "custom") { syncConfigFromInputs(); }
-                });
-            });
-            cfgSpreadRows.addEventListener('change', () => { if (mode === "custom") { syncConfigFromInputs(); } });
-            cfgSpreadBlocks.addEventListener('change', () => { if (mode === "custom") { syncConfigFromInputs(); } });
+        // ========= Board Generation with Guarantees =========
+        function newRun() {
+          gameOver = false;
+          selected = null;
+          pickedDigit = null;
+          flagsCount = 0;
+          flagMode = false;
+          flagBtn.classList.remove("flagModeOn");
 
-            saveCustomBtn.addEventListener('click', () => { syncConfigFromInputs(); setStatus("Custom config saved. New Run to apply.", "win"); });
-            resetCustomBtn.addEventListener('click', () => {
-                PRESETS.custom = { ...PRESETS.story };
-                syncInputsFromConfig(PRESETS.custom);
-                saveCustomToLS();
-                renderActiveConfigKV();
-                setStatus("Custom config reset to defaults.", "hint");
-            });
+          const cfg = getActiveConfig();
+          lives = cfg.lives;
 
-            newRunBtn.addEventListener('click', newRun);
+          const MAX_TRIES = 25;
+          for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
+            solution = generateSudokuSolved();
+            const bp = placeBombs(cfg.bombRatio);
+            bombs = bp.b;
+            bombsTotal = bp.count;
+            bombsLeft = bombsTotal;
+            adj = computeAdj(bombs);
 
-            // ========= Board Generation with Guarantees =========
-            function newRun() {
-                gameOver = false; selected = null; pickedDigit = null; flagsCount = 0; flagMode = false;
-                flagBtn.classList.remove('flagModeOn');
+            ensureBombHasTwoSupports(2);
 
-                const cfg = getActiveConfig();
-                lives = cfg.lives;
+            const res = chooseGivensPatterned(cfg);
+            given = res.g;
 
-                const MAX_TRIES = 25;
-                for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
-                    solution = generateSudokuSolved();
-                    const bp = placeBombs(cfg.bombRatio);
-                    bombs = bp.b; bombsTotal = bp.count; bombsLeft = bombsTotal;
-                    adj = computeAdj(bombs);
+            selectRowColHints(cfg);
 
-                    ensurePerBombHasClue(2);
+            revealed = Array.from({ length: SIDE }, (_) =>
+              Array(SIDE).fill(false)
+            );
+            flagged = Array.from({ length: SIDE }, (_) =>
+              Array(SIDE).fill(false)
+            );
+            flagNote = Array.from({ length: SIDE }, (_) =>
+              Array(SIDE).fill(null)
+            );
+            for (let r = 0; r < SIDE; r++)
+              for (let c = 0; c < SIDE; c++)
+                if (given[r][c]) revealed[r][c] = true;
 
-                    const res = chooseGivensPatterned(cfg);
-                    given = res.g; lastAnchorInfo = res.anchorBlock;
+            if (passesSimpleLogicTest(given)) break;
+            if (attempt === MAX_TRIES)
+              console.warn(
+                "Using last attempt; couldn't guarantee progress this time."
+              );
+          }
 
-                    revealed = Array.from({ length: SIDE }, _ => Array(SIDE).fill(false));
-                    flagged = Array.from({ length: SIDE }, _ => Array(SIDE).fill(false));
-                    flagNote = Array.from({ length: SIDE }, _ => Array(SIDE).fill(null));
-                    for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) if (given[r][c]) revealed[r][c] = true;
+          renderLives();
+          renderBoard();
+          updateStats();
+          renderActiveConfigKV();
+          setStatus(
+            "Balanced start seeded across the board. Clue tiles always have nearby context—chain logic from the easy (low-adjacent) clusters.",
+            "hint"
+          );
+          buildNumpad();
+        }
 
-                    if (passesSimpleLogicTest(given)) break;
-                    if (attempt === MAX_TRIES) console.warn("Using last attempt; couldn't guarantee progress this time.");
-                }
-
-                renderLives();
-                renderBoard();
-                updateStats();
-                renderActiveConfigKV();
-                setStatus(`Anchored district [${lastAnchorInfo.br + 1},${lastAnchorInfo.bc + 1}] with ${lastAnchorInfo.anchorsPlaced} safe reveals. Flag with digits to track your logic.`);
-                buildNumpad();
-            }
-
-            // ========= Init =========
-            loadCustomFromLS();
-            updateConfigInputsUI();
-            newRun();
-        })();
+        // ========= Init =========
+        loadCustomFromLS();
+        updateConfigInputsUI();
+        newRun();
+      })();
     </script>
-</body>
-
+  </body>
 </html>
