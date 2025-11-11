@@ -4,7 +4,7 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Sudoku × Minesweeper — Flags-with-Digits + Remove Flag + Difficulty Starts</title>
+    <title>Sudoku × Minesweeper — Clue UI + Guide</title>
     <style>
         :root {
             --bg: #0e0f14;
@@ -38,6 +38,13 @@
             align-items: center;
             gap: 16px;
             padding: 18px
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 18px;
+            color: var(--accent);
+            letter-spacing: .3px
         }
 
         .topbar {
@@ -137,7 +144,7 @@
             font-size: clamp(16px, 3.0vw, 26px);
             font-weight: 900;
             color: #e9effa;
-            transition: .08s background, .08s transform;
+            transition: .08s background, .08s transform, .08s color, .08s box-shadow;
         }
 
         .cell.covered {
@@ -154,7 +161,7 @@
             font-size: 14px
         }
 
-        /* Flag digit now centered like a normal number but red */
+        /* Flag digit centered like a normal number but red */
         .flagDigit {
             position: relative;
             z-index: 1;
@@ -172,27 +179,11 @@
             outline: 1px solid #0006
         }
 
+        /* New clue styling: same big digit, special color/glow/border */
         .cell.clue.revealed {
+            color: var(--clue);
             outline: 2px solid #3a7aa6aa;
-            box-shadow: inset 0 0 0 1px #6fc8ff33
-        }
-
-        .badge {
-            position: absolute;
-            right: 6px;
-            top: 6px;
-            font-size: 12px;
-            font-weight: 800;
-            color: #dff2ff;
-            background: #0b1a26;
-            padding: 2px 6px;
-            border-radius: 999px;
-            border: 1px solid #64a8ff40;
-            display: none;
-        }
-
-        .cell.clue .badge {
-            display: block
+            box-shadow: inset 0 0 0 1px #6fc8ff33, 0 0 6px #6fc8ff33;
         }
 
         .cell.bomb.revealed {
@@ -316,7 +307,7 @@
             color: var(--clue)
         }
 
-        details.config {
+        details.block {
             background: var(--panel);
             border-radius: 12px;
             padding: 10px 12px;
@@ -324,7 +315,7 @@
             width: min(96vw, 980px)
         }
 
-        details.config>summary {
+        details.block>summary {
             cursor: pointer;
             outline: none;
             list-style: none;
@@ -332,6 +323,7 @@
             color: var(--accent)
         }
 
+        /* Config grid */
         .cfggrid {
             display: grid;
             gap: 10px;
@@ -382,6 +374,69 @@
             font-size: 12px;
             margin-top: 6px
         }
+
+        /* Legend demo tiles */
+        .legend {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 10px
+        }
+
+        .tileDemo {
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            font-weight: 900;
+            font-size: 18px;
+            position: relative;
+        }
+
+        .demo-covered {
+            background: var(--tile2)
+        }
+
+        .demo-normal {
+            background: var(--tile3);
+            outline: 1px solid #0006
+        }
+
+        .demo-clue {
+            background: var(--tile3);
+            color: var(--clue);
+            outline: 2px solid #3a7aa6aa;
+            box-shadow: inset 0 0 0 1px #6fc8ff33, 0 0 6px #6fc8ff33
+        }
+
+        .demo-flag {
+            background: var(--tile2)
+        }
+
+        .demo-flag::before {
+            content: "⚑";
+            position: absolute;
+            left: 4px;
+            top: 2px;
+            color: var(--flag);
+            font-size: 12px
+        }
+
+        .demo-flag .digit {
+            color: var(--flagDigit)
+        }
+
+        .demo-bomb {
+            background: linear-gradient(180deg, #311a22, #2a1a1f);
+            outline: 2px solid #ff4b6e80
+        }
+
+        .demo-bomb::after {
+            content: "💣";
+            font-size: 18px
+        }
     </style>
 </head>
 
@@ -425,7 +480,50 @@
         </aside>
     </div>
 
-    <details class="config" id="configPanel">
+    <!-- 📘 How to Play / Legend -->
+    <details class="block" id="guide">
+        <summary>📘 How to Play, Rules & Legend</summary>
+        <div style="margin-top:10px">
+            <ol>
+                <li><b>Goal:</b> Flag <i>all bombs</i> and reveal all safe digits. Follow <b>Sudoku rules</b> (1–9 in
+                    each row/column/3×3 block).</li>
+                <li><b>Two modes:</b>
+                    <ul>
+                        <li><b>Reveal mode</b> — pick a number, select a covered tile, hit <b>Confirm</b>.
+                            <ul>
+                                <li>If you reveal a bomb → <b>instant loss</b>.</li>
+                                <li>If the digit is wrong → <b>lose 1 life</b>.</li>
+                                <li>If correct → the tile reveals. If it’s a <b>clue</b>, it means the <u>shown digit
+                                        equals the count of adjacent bombs</u>.</li>
+                            </ul>
+                        </li>
+                        <li><b>Flag mode</b> — click <b>⚑ Flag</b>, pick a number, select a tile, then <b>Confirm</b>.
+                            <ul>
+                                <li>Places a <b>flag + red digit</b> (your hypothesis). <b>No life loss</b> for wrong
+                                    flags.</li>
+                                <li>Use <b>✖ Remove Flag</b> on a selected flagged tile to clear it and its digit.</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </li>
+                <li><b>Clue tiles</b> are safe digits where the number also equals the number of bombs in the 8
+                    neighbors (Minesweeper-style). They look like normal digits but are <span
+                        style="color:var(--clue);font-weight:800">teal</span> and slightly glowing.</li>
+                <li><b>Lives & Endings:</b> You start with lives (see top-left hearts). Wrong reveal digits cost 1 life.
+                    Revealing a bomb loses instantly. Win by revealing all safe tiles and flagging all bombs.</li>
+            </ol>
+            <div class="legend">
+                <div class="tileDemo demo-covered" title="Covered tile"></div>
+                <div class="tileDemo demo-normal" title="Revealed normal digit"><span>5</span></div>
+                <div class="tileDemo demo-clue" title="Revealed clue digit (teal)"><span>3</span></div>
+                <div class="tileDemo demo-flag" title="Flag with digit"><span class="digit">7</span></div>
+                <div class="tileDemo demo-bomb" title="Revealed bomb"></div>
+            </div>
+        </div>
+    </details>
+
+    <!-- ⚙️ Config -->
+    <details class="block" id="configPanel">
         <summary>⚙️ Configure Mode (Custom unlocks inputs)</summary>
         <div class="cfggrid">
             <div class="cfgitem">
@@ -433,28 +531,28 @@
                 <input type="range" id="cfgLives" min="1" max="7" step="1" value="3" />
             </div>
             <div class="cfgitem">
-                <h4>Bomb Ratio: <span class="val" id="valBombRatio">0.15</span></h4>
-                <input type="range" id="cfgBombRatio" min="0.08" max="0.30" step="0.01" value="0.15" />
-                <div class="inlineHelp">% of cells that are bombs (0.15 ≈ 12–15 bombs).</div>
+                <h4>Bomb Ratio: <span class="val" id="valBombRatio">0.13</span></h4>
+                <input type="range" id="cfgBombRatio" min="0.08" max="0.30" step="0.01" value="0.13" />
+                <div class="inlineHelp">% of cells that are bombs (0.13 ≈ 10–12 bombs).</div>
             </div>
             <div class="cfgitem">
-                <h4>Anchors in District: <span class="val" id="valAnchors">6</span></h4>
-                <input type="range" id="cfgAnchors" min="3" max="8" step="1" value="6" />
+                <h4>Anchors in District: <span class="val" id="valAnchors">7</span></h4>
+                <input type="range" id="cfgAnchors" min="3" max="8" step="1" value="7" />
                 <div class="inlineHelp">Safe tiles revealed inside an anchored 3×3 block (clue-biased).</div>
             </div>
             <div class="cfgitem">
-                <h4>Start Clues Target: <span class="val" id="valStartClues">20</span></h4>
-                <input type="range" id="cfgStartClues" min="6" max="45" step="1" value="20" />
+                <h4>Start Clues Target: <span class="val" id="valStartClues">26</span></h4>
+                <input type="range" id="cfgStartClues" min="6" max="45" step="1" value="26" />
                 <div class="inlineHelp">Minimum count of clue tiles shown at start.</div>
             </div>
             <div class="cfgitem">
-                <h4>Start Givens (Total): <span class="val" id="valStartGivens">44</span></h4>
-                <input type="range" id="cfgStartGivens" min="10" max="65" step="1" value="44" />
+                <h4>Start Givens (Total): <span class="val" id="valStartGivens">52</span></h4>
+                <input type="range" id="cfgStartGivens" min="10" max="65" step="1" value="52" />
                 <div class="inlineHelp">Total tiles revealed at start (clues & normals; never bombs).</div>
             </div>
             <div class="cfgitem">
-                <h4>Max Adj for Start: <span class="val" id="valMaxAdj">3</span></h4>
-                <input type="range" id="cfgMaxAdj" min="0" max="8" step="1" value="3" />
+                <h4>Max Adj for Start: <span class="val" id="valMaxAdj">2</span></h4>
+                <input type="range" id="cfgMaxAdj" min="0" max="8" step="1" value="2" />
                 <div class="inlineHelp">Prefer clues with ≤ this many adjacent bombs (lower = easier logic).</div>
             </div>
             <div class="cfgitem switch">
@@ -480,18 +578,21 @@
 
     <script>
         (() => {
-            // ========= Modes & Defaults (more starts per difficulty) =========
+            // ========= Modes & Defaults (Story/Normal show more starts) =========
             const SIDE = 9, BASE = 3;
 
             const PRESETS = {
-                // easier: more givens/clues
-                story: { lives: 3, bombRatio: 0.14, anchors: 6, targetStartClues: 22, targetStartGivens: 46, maxAdjStart: 3, spreadRows: true, spreadBlocks: true },
-                // medium
-                normal: { lives: 3, bombRatio: 0.18, anchors: 6, targetStartClues: 18, targetStartGivens: 38, maxAdjStart: 4, spreadRows: true, spreadBlocks: true },
-                // harder: fewer givens/clues but still solvable
-                hard: { lives: 5, bombRatio: 0.22, anchors: 5, targetStartClues: 14, targetStartGivens: 32, maxAdjStart: 5, spreadRows: true, spreadBlocks: true },
-                // custom starts from story defaults; user can change
-                custom: { lives: 3, bombRatio: 0.14, anchors: 6, targetStartClues: 20, targetStartGivens: 44, maxAdjStart: 3, spreadRows: true, spreadBlocks: true }
+                // Easier but much sparser opening
+                story: { lives: 3, bombRatio: 0.14, anchors: 5, targetStartClues: 16, targetStartGivens: 36, maxAdjStart: 3, spreadRows: true, spreadBlocks: true },
+
+                // Moderate: fewer givens & clues
+                normal: { lives: 3, bombRatio: 0.18, anchors: 4, targetStartClues: 12, targetStartGivens: 28, maxAdjStart: 4, spreadRows: true, spreadBlocks: true },
+
+                // Hard: very sparse start
+                hard: { lives: 5, bombRatio: 0.22, anchors: 3, targetStartClues: 8, targetStartGivens: 18, maxAdjStart: 5, spreadRows: true, spreadBlocks: true },
+
+                // Custom starts from story-ish but lean
+                custom: { lives: 3, bombRatio: 0.14, anchors: 5, targetStartClues: 14, targetStartGivens: 32, maxAdjStart: 3, spreadRows: true, spreadBlocks: true }
             };
 
             const LS_KEY = "runic-custom-config-v1";
@@ -732,10 +833,31 @@
                     }
                 }
 
+                // --- Final top-up to guarantee targets ---
+                const lowAdjClues = clues
+                    .filter(([r, c]) => !g[r][c])
+                    .sort((a, b) => adj[a[0]][a[1]] - adj[b[0]][b[1]]);
+
+                for (const [r, c] of lowAdjClues) {
+                    if (clueRevealed >= targetStartClues || totalRevealed >= targetStartGivens) break;
+                    g[r][c] = true; clueRevealed++; totalRevealed++;
+                }
+
+                if (totalRevealed < targetStartGivens) {
+                    const lowAdjNormals = normals
+                        .filter(([r, c]) => !g[r][c])
+                        .sort((a, b) => adj[a[0]][a[1]] - adj[b[0]][b[1]]);
+
+                    for (const [r, c] of lowAdjNormals) {
+                        if (totalRevealed >= targetStartGivens) break;
+                        g[r][c] = true; totalRevealed++;
+                    }
+                }
+
                 return { g, anchorBlock: { br, bc, anchorsPlaced } };
             }
 
-            // reject boards that force guessing at start
+            // reject boards that force guessing at start (simple logic pass)
             function passesSimpleLogicTest(givenMask, maxSteps = 50) {
                 const cov = Array.from({ length: SIDE }, _ => Array(SIDE).fill(true));
                 const flag = Array.from({ length: SIDE }, _ => Array(SIDE).fill(false));
@@ -848,9 +970,6 @@
                             const m = document.createElement('div'); m.className = "bombmark"; m.textContent = "💣"; div.appendChild(m);
                         } else {
                             div.textContent = solution[r][c];
-                            if (type === "clue") {
-                                const b = document.createElement('div'); b.className = "badge"; b.textContent = adj[r][c]; div.appendChild(b);
-                            }
                             if (given[r][c]) div.classList.add("given");
                         }
                     } else {
@@ -869,37 +988,20 @@
                 updateRemoveFlagButton();
             }
             function renderCell(r, c) {
-                const idx = r * SIDE + c;
-                const div = boardEl.children[idx];
-                if (!div) return;
+                const idx = r * SIDE + c, div = boardEl.children[idx]; if (!div) return;
 
-                // ✅ clear previous children (including old .flagDigit)
+                // clear old children (e.g., previous flagDigit)
                 div.innerHTML = "";
 
-                div.className = "cell";
-                div.dataset.r = r;
-                div.dataset.c = c;
-                if (r % 3 === 0 && c % 3 === 0) {
-                    const sg = document.createElement('div');
-                    sg.className = 'subgrid';
-                    div.appendChild(sg);
-                }
+                div.className = "cell"; div.dataset.r = r; div.dataset.c = c;
+                if (r % 3 === 0 && c % 3 === 0) { const sg = document.createElement('div'); sg.className = 'subgrid'; div.appendChild(sg); }
                 const isRev = revealed[r][c], isFlag = flagged[r][c], type = tileType(r, c);
                 if (isRev) {
                     div.classList.add("revealed", type);
                     if (type === "bomb") {
-                        const m = document.createElement('div');
-                        m.className = "bombmark";
-                        m.textContent = "💣";
-                        div.appendChild(m);
+                        const m = document.createElement('div'); m.className = "bombmark"; m.textContent = "💣"; div.appendChild(m);
                     } else {
                         div.textContent = solution[r][c];
-                        if (type === "clue") {
-                            const b = document.createElement('div');
-                            b.className = 'badge';
-                            b.textContent = adj[r][c];
-                            div.appendChild(b);
-                        }
                         if (given[r][c]) div.classList.add("given");
                     }
                 } else {
@@ -907,17 +1009,11 @@
                     if (isFlag) {
                         div.classList.add("flag");
                         const note = flagNote[r]?.[c];
-                        if (note) {
-                            const big = document.createElement('div');
-                            big.className = 'flagDigit';
-                            big.textContent = note;
-                            div.appendChild(big);
-                        }
+                        if (note) { const big = document.createElement('div'); big.className = 'flagDigit'; big.textContent = note; div.appendChild(big); }
                     }
                 }
                 updateRemoveFlagButton();
             }
-
 
             // ========= Selection / Input =========
             function setSelected(r, c) { if (gameOver) return; selected = { r, c }; highlightSelected(); asideHint.textContent = flagMode ? "Flag mode: pick a number then Confirm to place a flag + digit." : "Reveal mode: pick a number then Confirm to reveal."; updateRemoveFlagButton(); }
@@ -976,7 +1072,6 @@
                 if (!pickedDigit) { setStatus("Pick a number 1–9, then Confirm.", "lose"); bumpCell(r, c); return; }
 
                 if (flagMode) {
-                    // Place/update a flag with a digit note. Never costs life.
                     if (!flagged[r][c]) { flagged[r][c] = true; flagsCount++; }
                     if (!flagNote[r]) flagNote[r] = [];
                     flagNote[r][c] = pickedDigit;
@@ -998,8 +1093,6 @@
             function onMouseDownCell(e) {
                 const t = e.currentTarget; const r = +t.dataset.r, c = +t.dataset.c;
                 if (Number.isNaN(r) || Number.isNaN(c)) return;
-
-                // Right-click disabled; use Flag mode flow.
                 if (e.button === 2) {
                     e.preventDefault();
                     setStatus("Use Flag mode: click ⚑ Flag, pick a number, then Confirm.", "hint");
