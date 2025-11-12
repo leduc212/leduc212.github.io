@@ -3,9 +3,9 @@
   const SIDE = 9, BASE = 3;
 
   const PRESETS = {
-    story:  { lives: 3, bombRatio: 0.14, targetStartClues: 19, targetStartGivens: 40, maxAdjStart: 2, spreadRows: true, spreadBlocks: true, hintRows: 3, hintCols: 3 },
+    story:  { lives: 5, bombRatio: 0.14, targetStartClues: 19, targetStartGivens: 40, maxAdjStart: 2, spreadRows: true, spreadBlocks: true, hintRows: 3, hintCols: 3 },
     normal: { lives: 3, bombRatio: 0.18, targetStartClues: 15, targetStartGivens: 32, maxAdjStart: 3, spreadRows: true, spreadBlocks: true, hintRows: 2, hintCols: 2 },
-    hard:   { lives: 5, bombRatio: 0.22, targetStartClues: 9,  targetStartGivens: 20, maxAdjStart: 4, spreadRows: true, spreadBlocks: true, hintRows: 1, hintCols: 2 },
+    hard:   { lives: 3, bombRatio: 0.22, targetStartClues: 9,  targetStartGivens: 20, maxAdjStart: 4, spreadRows: true, spreadBlocks: true, hintRows: 1, hintCols: 2 },
     custom: { lives: 3, bombRatio: 0.14, targetStartClues: 17, targetStartGivens: 36, maxAdjStart: 2, spreadRows: true, spreadBlocks: true, hintRows: 3, hintCols: 3 },
   };
 
