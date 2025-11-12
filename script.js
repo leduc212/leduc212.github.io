@@ -3,9 +3,9 @@
   const SIDE = 9, BASE = 3;
 
   const PRESETS = {
-    story:  { lives: 5, bombRatio: 0.14, targetStartClues: 19, targetStartGivens: 40, maxAdjStart: 2, spreadRows: true, spreadBlocks: true, hintRows: 3, hintCols: 3 },
-    normal: { lives: 3, bombRatio: 0.18, targetStartClues: 15, targetStartGivens: 32, maxAdjStart: 3, spreadRows: true, spreadBlocks: true, hintRows: 2, hintCols: 2 },
-    hard:   { lives: 3, bombRatio: 0.22, targetStartClues: 9,  targetStartGivens: 20, maxAdjStart: 4, spreadRows: true, spreadBlocks: true, hintRows: 1, hintCols: 2 },
+    story:  { lives: 5, bombRatio: 0.14, targetStartClues: 19, targetStartGivens: 40, maxAdjStart: 2, spreadRows: true, spreadBlocks: true, hintRows: 4, hintCols: 4 },
+    normal: { lives: 4, bombRatio: 0.18, targetStartClues: 15, targetStartGivens: 32, maxAdjStart: 3, spreadRows: true, spreadBlocks: true, hintRows: 3, hintCols: 3 },
+    hard:   { lives: 3, bombRatio: 0.22, targetStartClues: 9,  targetStartGivens: 20, maxAdjStart: 4, spreadRows: true, spreadBlocks: true, hintRows: 2, hintCols: 2 },
     custom: { lives: 3, bombRatio: 0.14, targetStartClues: 17, targetStartGivens: 36, maxAdjStart: 2, spreadRows: true, spreadBlocks: true, hintRows: 3, hintCols: 3 },
   };
 
@@ -14,8 +14,9 @@
   // ========= State =========
   let mode = "story";
   let solution = [], bombs = [], adj = [], revealed = [], flagged = [], flagNote = [], given = [];
+  let markNote = []; // NEW: stores yellow "mark" digits per tile
   let lives = 3, bombsTotal = 0, flagsCount = 0;
-  let selected = null, pickedDigit = null, gameOver = false, flagMode = false;
+  let selected = null, pickedDigit = null, gameOver = false, flagMode = false, markMode = false;
   let reviewMode = false, didWin = false;
   let hintedRows = [], hintedCols = [];
   let rowTotals = [], colTotals = [];
@@ -32,7 +33,9 @@
   const numpadEl = document.getElementById("numpad");
   const confirmBtn = document.getElementById("confirm");
   const flagBtn = document.getElementById("flagBtn");
+  const markBtn = document.getElementById("markBtn");
   const removeFlagBtn = document.getElementById("removeFlagBtn");
+  const removeMarkBtn = document.getElementById("removeMarkBtn");
   const asideHint = document.getElementById("asideHint");
   const activeConfigEl = document.getElementById("activeConfig");
   const saveCustomBtn = document.getElementById("saveCustom");
@@ -59,7 +62,7 @@
   const colHL = document.createElement("div"); colHL.id = "colHL"; colHL.className = "hlStripe";
   boardWrapEl.appendChild(rowHL); boardWrapEl.appendChild(colHL);
 
-  // ========= Review toggle (bugfix: always exits/enters cleanly) =========
+  // ========= Review toggle (bugfix: always exits/enters) =========
   reviewBtn.addEventListener("click", () => {
     if (!gameOver) return;
     reviewMode = !reviewMode;
@@ -87,7 +90,6 @@
 
   // ========= Sudoku generator =========
   function generateSudokuSolved() {
-    // pattern-based Latin-square shuffling (fast + valid)
     const pattern = (r, c) => (BASE * (r % BASE) + Math.floor(r / BASE) + c) % SIDE;
     const rBase = [0, 1, 2];
     const rows = [].concat(...shuffle([0, 1, 2]).map((g) => shuffle([...rBase]).map((r) => g * BASE + r)));
@@ -115,7 +117,7 @@
   }
   function tileType(r, c) { return bombs[r][c] ? "bomb" : (solution[r][c] === adj[r][c] ? "clue" : "normal"); }
 
-  // Encourage each bomb to have at least two neighboring clue supports (gentle nudge)
+  // Encourage each bomb to have at least two neighboring clue supports
   function ensureBombHasTwoSupports(maxPasses = 2) {
     const countClueNeighbors = (r, c, A = adj) =>
       neighbors8(r, c).reduce((n, [rr, cc]) => n + (!bombs[rr][cc] && solution[rr][cc] === A[rr][cc] ? 1 : 0), 0);
@@ -149,9 +151,8 @@
     }
   }
 
-  // ========= Picking initial givens (clues + some normals) =========
+  // ========= Picking initial givens =========
   function chooseGivensPatterned(cfg) {
-    // Preference list: low-adjacent clues first, then other clues, then safe normals
     const cells = [];
     for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) {
       if (bombs[r][c]) continue;
@@ -160,7 +161,6 @@
       const score =
         (isClue ? 1000 : 0) +
         (lowAdj ? 100 : 0) +
-        // light spreading by row/col/block
         (cfg.spreadRows ? (8 - Math.abs(4 - r)) : 0) +
         (cfg.spreadBlocks ? (8 - Math.abs(4 - ((Math.floor(r/3)*3)+(Math.floor(c/3))))) : 0);
       cells.push({ r, c, isClue, score });
@@ -170,17 +170,15 @@
     const g = Array.from({ length: SIDE }, () => Array(SIDE).fill(false));
     let clues = 0, total = 0;
 
-    // First pass: pick clues up to targetStartClues
     for (const it of cells) {
-      if (total >= cfg.targetStartGivens) break;
-      if (it.isClue && clues < cfg.targetStartClues) {
+      if (total >= PRESETS[mode].targetStartGivens) break;
+      if (it.isClue && clues < PRESETS[mode].targetStartClues) {
         g[it.r][it.c] = true;
         clues++; total++;
       }
     }
-    // Second pass: fill remaining givens with non-bomb safest tiles
     for (const it of cells) {
-      if (total >= cfg.targetStartGivens) break;
+      if (total >= PRESETS[mode].targetStartGivens) break;
       if (!g[it.r][it.c]) {
         g[it.r][it.c] = true; total++;
       }
@@ -188,9 +186,7 @@
     return { g, clues };
   }
 
-  // A light sanity test to avoid pathological starts
   function passesSimpleLogicTest(g) {
-    // ensure at least 1 given per row and column, and no given is a bomb
     for (let i = 0; i < SIDE; i++) {
       let rowOk = false, colOk = false;
       for (let j = 0; j < SIDE; j++) {
@@ -306,12 +302,15 @@
     div.innerHTML = "";
     div.className = "cell";
     div.dataset.r = r; div.dataset.c = c;
-    if (r % 3 === 0 && c % 3 === 0) { const sg = document.createElement("div"); sg.className = "subgrid"; div.appendChild(sg); }
+
+    // District borders (thick lines every 3 cells)
+    if ((c + 1) % 3 === 0 && c !== SIDE - 1) div.classList.add("bRight");
+    if ((r + 1) % 3 === 0 && r !== SIDE - 1) div.classList.add("bBottom");
+
     const isRev = revealed[r][c], isFlag = flagged[r][c], type = tileType(r, c);
 
     // post-loss bombs always visible (even outside review)
     if (gameOver && !didWin && showAllBombs && bombs[r][c] && !isRev) {
-      div.classList.add("postHiddenBomb");
       const m = document.createElement("div"); m.className = "bombmark"; m.textContent = "💣"; div.appendChild(m);
     }
 
@@ -319,7 +318,6 @@
     if (reviewMode && gameOver) {
       if (!isRev) {
         if (bombs[r][c]) {
-          div.classList.add("postHiddenBomb");
           const m = document.createElement("div"); m.className = "bombmark"; m.textContent = "💣"; div.appendChild(m);
         } else {
           const isClue = solution[r][c] === adj[r][c];
@@ -328,13 +326,8 @@
         }
       }
       if (isFlag) {
-        if (bombs[r][c]) {
-          div.classList.add("flagRight");
-          const note = flagNote[r]?.[c]; if (note != null) div.classList.add("flagDigitNoteOnBomb");
-        } else {
-          div.classList.add("flagWrong");
-          const note = flagNote[r]?.[c]; if (note != null && note !== solution[r][c]) div.classList.add("flagDigitWrong");
-        }
+        if (bombs[r][c]) div.classList.add("flagRight");
+        else div.classList.add("flagWrong");
       }
     }
 
@@ -348,10 +341,22 @@
       }
     } else {
       div.classList.add("covered");
+
+      // Flag (takes precedence over mark visual)
       if (isFlag) {
         div.classList.add("flag");
         const note = flagNote[r]?.[c];
         if (note) { const big = document.createElement("div"); big.className = "flagDigit"; big.textContent = note; div.appendChild(big); }
+      } else {
+        // Mark (yellow)
+        const m = markNote[r]?.[c];
+        if (m != null) {
+          div.classList.add("mark");
+          const md = document.createElement("div");
+          md.className = "markDigit";
+          md.textContent = m;
+          div.appendChild(md);
+        }
       }
     }
   }
@@ -366,7 +371,7 @@
       boardEl.appendChild(div);
     }
     highlightSelected();
-    updateRemoveFlagButton();
+    updateRemoveButtons();
     requestAnimationFrame(renderRowColHintsOverlay);
   }
 
@@ -374,7 +379,7 @@
     const idx = r * SIDE + c, div = boardEl.children[idx];
     if (!div) return;
     paintCell(div, r, c);
-    updateRemoveFlagButton();
+    updateRemoveButtons();
   }
 
   // ========= Selection & input =========
@@ -397,19 +402,29 @@
   function setSelected(r, c) {
     if (gameOver) return;
     selected = { r, c }; highlightSelected();
-    asideHint.textContent = flagMode ? "Flag mode: pick a number then Confirm to place a flag + digit." : "Reveal mode: pick a number then Confirm to reveal.";
-    updateRemoveFlagButton();
+    updateHintText();
+    updateRemoveButtons();
   }
-  function clearSelected() { selected = null; highlightSelected(); updateRemoveFlagButton(); }
+  function clearSelected() { selected = null; highlightSelected(); updateRemoveButtons(); }
   function highlightSelected() {
     for (const ch of boardEl.children) ch.classList.remove("sel");
     if (!selected) return;
     const idx = selected.r * SIDE + selected.c; const div = boardEl.children[idx];
     if (div) div.classList.add("sel");
   }
-  function updateRemoveFlagButton() {
-    if (!selected) { removeFlagBtn.disabled = true; return; }
-    const { r, c } = selected; removeFlagBtn.disabled = !flagged[r][c];
+  function updateRemoveButtons() {
+    if (!selected) {
+      removeFlagBtn.disabled = true; removeMarkBtn.disabled = true; return;
+    }
+    const { r, c } = selected;
+    removeFlagBtn.disabled = !flagged[r][c];
+    removeMarkBtn.disabled = !(markNote[r] && markNote[r][c] != null);
+  }
+
+  function updateHintText() {
+    if (flagMode) asideHint.textContent = "Flag mode: pick a number → Confirm to place a flag digit (no life loss).";
+    else if (markMode) asideHint.textContent = "Mark mode: pick a number → Confirm to pencil the digit in yellow (no effect on lives).";
+    else asideHint.textContent = "Reveal mode: pick a number → Confirm to reveal (wrong digit costs a life; bomb loses instantly).";
   }
 
   function buildNumpad() {
@@ -431,10 +446,21 @@
     if (pickedDigit != null) { const idx = pickedDigit - 1; if (btns[idx]) btns[idx].classList.add("sel"); }
   }
 
+  // Mode toggles
   flagBtn.addEventListener("click", () => {
-    flagMode = !flagMode; flagBtn.classList.toggle("flagModeOn", flagMode);
-    setStatus(flagMode ? "Flag mode ON: choose a number then Confirm to place flag + digit (no life loss)." : "Reveal mode ON: choose a number then Confirm to reveal.", "hint");
-    asideHint.textContent = flagMode ? "Flag mode: pick a number → Confirm to place a flag digit (no life loss)." : "Reveal mode: pick a number → Confirm to reveal; wrong digit costs a life.";
+    flagMode = !flagMode; if (flagMode) markMode = false;
+    flagBtn.classList.toggle("flagModeOn", flagMode);
+    markBtn.classList.remove("markModeOn");
+    setStatus(flagMode ? "Flag mode ON." : "Flag mode OFF.", "hint");
+    updateHintText();
+  });
+
+  markBtn.addEventListener("click", () => {
+    markMode = !markMode; if (markMode) flagMode = false;
+    markBtn.classList.toggle("markModeOn", markMode);
+    flagBtn.classList.remove("flagModeOn");
+    setStatus(markMode ? "Mark mode ON." : "Mark mode OFF.", "hint");
+    updateHintText();
   });
 
   removeFlagBtn.addEventListener("click", () => {
@@ -449,6 +475,16 @@
     setStatus("Flag removed.", "hint");
   });
 
+  removeMarkBtn.addEventListener("click", () => {
+    if (gameOver || !selected) return;
+    const { r, c } = selected;
+    if (!(markNote[r] && markNote[r][c] != null)) return;
+    markNote[r][c] = null;
+    renderCell(r, c);
+    setStatus("Mark removed.", "hint");
+  });
+
+  // Confirm button: acts based on current mode
   confirmBtn.addEventListener("click", () => {
     if (gameOver) return;
     if (!selected) { setStatus("Select a covered tile first.", "lose"); return; }
@@ -456,22 +492,39 @@
 
     if (revealed[r][c]) { setStatus("Tile already revealed.", "lose"); bumpCell(r, c); return; }
 
+    // MARK MODE
+    if (markMode) {
+      if (!pickedDigit) { setStatus("Pick a number 1–9, then Confirm to mark.", "lose"); bumpCell(r, c); return; }
+      if (!markNote[r]) markNote[r] = [];
+      markNote[r][c] = pickedDigit;
+      renderCell(r, c);
+      setStatus("Digit marked in yellow (no life effect).", "hint");
+      return;
+    }
+
+    // FLAG MODE
     if (flagMode) {
       if (!flagged[r][c]) { flagged[r][c] = true; flagsCount++; }
       if (!flagNote[r]) flagNote[r] = [];
-      flagNote[r][c] = pickedDigit ?? null;
+      flagNote[r][c] = pickedDigit ?? null; // allow blank flag
+      // clear any mark if present
+      if (markNote[r]) markNote[r][c] = null;
       renderCell(r, c); updateStats();
       setStatus(flagNote[r][c] == null ? "Blank flag placed." : "Flag placed.", "hint");
       if (isWin()) endGame(true, "All bombs flagged & safe tiles revealed!");
       return;
     }
 
+    // REVEAL MODE
     if (!pickedDigit) { setStatus("Pick a number 1–9, then Confirm.", "lose"); bumpCell(r, c); return; }
 
     if (bombs[r][c]) { endGame(false, "You revealed a bomb."); return; }
     if (pickedDigit !== solution[r][c]) { loseLife(); if (!gameOver) setStatus(`Wrong digit. Life -1.`, "lose"); return; }
 
-    revealed[r][c] = true; renderCell(r, c);
+    revealed[r][c] = true;
+    // clear any mark on reveal
+    if (markNote[r]) markNote[r][c] = null;
+    renderCell(r, c);
     if (isWin()) endGame(true, "All bombs flagged & safe tiles revealed!");
     else setStatus("Nice! Keep chaining logic from the anchors.");
   });
@@ -480,7 +533,7 @@
     const t = e.currentTarget;
     const r = +t.dataset.r, c = +t.dataset.c;
     if (Number.isNaN(r) || Number.isNaN(c)) return;
-    if (e.button === 2) { e.preventDefault(); setStatus("Use Flag mode: click ⚑ Flag, pick a number, then Confirm.", "hint"); bumpCell(r, c); return; }
+    if (e.button === 2) { e.preventDefault(); setStatus("Use Flag/Mark modes with the buttons above.", "hint"); bumpCell(r, c); return; }
     if (!revealed[r][c]) setSelected(r, c); else clearSelected();
   }
   function onTouchCell(e) {
@@ -590,7 +643,9 @@ spreadByBlocks: ${cfg.spreadBlocks}`;
   // ========= Board generation =========
   function newRun() {
     gameOver = false; didWin = false; reviewMode = false; showAllBombs = false;
-    selected = null; pickedDigit = null; flagsCount = 0; flagMode = false; flagBtn.classList.remove("flagModeOn");
+    selected = null; pickedDigit = null; flagsCount = 0; flagMode = false; markMode = false;
+    flagBtn.classList.remove("flagModeOn");
+    markBtn.classList.remove("markModeOn");
     const cfg = getActiveConfig(); lives = cfg.lives;
 
     const MAX_TRIES = 25;
@@ -604,6 +659,7 @@ spreadByBlocks: ${cfg.spreadBlocks}`;
       revealed = Array.from({ length: SIDE }, () => Array(SIDE).fill(false));
       flagged  = Array.from({ length: SIDE }, () => Array(SIDE).fill(false));
       flagNote = Array.from({ length: SIDE }, () => Array(SIDE).fill(null));
+      markNote = Array.from({ length: SIDE }, () => Array(SIDE).fill(null));
       for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) if (given[r][c]) revealed[r][c] = true;
 
       if (passesSimpleLogicTest(given)) break;
@@ -613,7 +669,7 @@ spreadByBlocks: ${cfg.spreadBlocks}`;
     renderLives(); renderBoard(); updateStats(); renderActiveConfigKV();
     reviewBtn.style.display = "none";
     reviewBtn.textContent = "👁 Review Board";
-    setStatus("Balanced start seeded across the board. Clue tiles always have nearby context—chain logic from the easy (low-adjacent) clusters.", "hint");
+    setStatus("Balanced start. Use yellow ✎ Marks to pencil digits you're not ready to reveal.", "hint");
     buildNumpad();
   }
 

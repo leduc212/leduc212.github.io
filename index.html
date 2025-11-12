@@ -1,133 +1,144 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Sudoku × Minesweeper — Clue UI + Guide</title>
-    <link rel="stylesheet" href="styles.css" />
-  </head>
 
-  <body>
-    <div class="topbar">
-      <div class="lives" id="lives"></div>
-      <div class="stats">
-        Bombs: <b id="bombsLeft">--</b> • Flags: <b id="flagsCnt">0</b>
-      </div>
-      <div class="controls">
-        <select id="mode" title="Mode">
-          <option value="story" selected>Story</option>
-          <option value="normal">Normal</option>
-          <option value="hard">Hard</option>
-          <option value="custom">Custom…</option>
-        </select>
-        <button id="newRun">New Run</button>
-        <button id="reviewBtn" style="display:none">👁 Review Board</button>
-      </div>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sudoku × Minesweeper — Clue UI + Guide</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+  <div class="topbar">
+    <div class="lives" id="lives"></div>
+    <div class="stats">
+      Bombs: <b id="bombsLeft">--</b> • Flags: <b id="flagsCnt">0</b>
+    </div>
+    <div class="controls">
+      <select id="mode" title="Mode">
+        <option value="story" selected>Story</option>
+        <option value="normal">Normal</option>
+        <option value="hard">Hard</option>
+        <option value="custom">Custom…</option>
+      </select>
+      <button id="newRun">New Run</button>
+      <button id="reviewBtn" style="display:none">👁 Review Board</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <!-- 🔔 Prominent notice bar above the board -->
+    <div id="status" class="status">
+      Rules: Flag mode → pick a number → Confirm to place a flag (no life loss). Remove Flag clears the flag &amp; its
+      digit. Reveal mode → pick a number → Confirm to reveal; wrong digit costs a life; revealing a bomb loses
+      instantly.
     </div>
 
-    <div class="layout">
-      <!-- 🔔 Prominent notice bar above the board -->
-      <div id="status" class="status">
-        Rules: Flag mode → pick a number → Confirm to place a flag (no life loss). Remove Flag clears the flag &amp; its digit. Reveal mode → pick a number → Confirm to reveal; wrong digit costs a life; revealing a bomb loses instantly.
-      </div>
+    <div class="boardWrap">
+      <div id="board" class="board" role="grid" aria-label="Runic Sudoku board"></div>
 
-      <div class="boardWrap">
-        <div id="board" class="board" role="grid" aria-label="Runic Sudoku board"></div>
-
-        <!-- Gutters for on-board hints -->
-        <div id="rowHintsOverlay" class="rowHints"></div>
-        <div id="colHintsOverlay" class="colHints"></div>
-      </div>
-
-      <aside class="panel panel--aside">
-        <h3>Number</h3>
-        <div class="numpad" id="numpad"></div>
-        <div class="row">
-          <button id="confirm" class="confirm" title="Confirm on selected tile">Confirm</button>
-          <button id="flagBtn" title="Toggle flag mode">⚑ Flag</button>
-          <button id="removeFlagBtn" class="removeFlag" title="Remove flag on selected tile" disabled>✖ Remove Flag</button>
-        </div>
-        <div class="row row--hint">
-          <small id="asideHint" class="hint">
-            Flag mode: pick a number → Confirm to place a numbered flag (no life loss), or Confirm with no number to place a <b>blank flag</b>. “✖ Remove Flag” clears the flag &amp; its digit.
-          </small>
-        </div>
-        <div class="row row--config">
-          <h3>Active Config</h3>
-          <div id="activeConfig" class="kv"></div>
-        </div>
-      </aside>
+      <!-- Gutters for on-board hints -->
+      <div id="rowHintsOverlay" class="rowHints"></div>
+      <div id="colHintsOverlay" class="colHints"></div>
     </div>
 
-    <!-- 📘 How to Play / Legend -->
-    <details class="block" id="guide">
-      <summary>📘 How to Play, Rules &amp; Legend</summary>
-      <div class="guide__content">
-        <ol>
-          <li><b>Goal:</b> Flag <i>all bombs</i> and reveal all safe digits. Follow <b>Sudoku rules</b> (1–9 in each row/column/3×3 block).</li>
-          <li>
-            <b>Two modes:</b>
-            <ul>
-              <li><b>Reveal mode</b> — pick a number, select a covered tile, hit <b>Confirm</b>.</li>
-              <li><b>Flag mode</b> — click <b>⚑ Flag</b>, pick a number, select a tile, then <b>Confirm</b>.</li>
-            </ul>
-          </li>
-          <li><b>Clue tiles</b> are safe digits where the number also equals the number of bombs in the 8 neighbors.</li>
-          <li><b>Lives &amp; Endings:</b> Wrong reveal digits cost 1 life. Revealing a bomb loses instantly.</li>
-        </ol>
-        <div class="legend">
-          <div class="tileDemo demo-covered" title="Covered tile"></div>
-          <div class="tileDemo demo-normal" title="Revealed normal digit"><span>5</span></div>
-          <div class="tileDemo demo-clue" title="Revealed clue digit (teal)"><span>3</span></div>
-          <div class="tileDemo demo-flag" title="Flag with digit"><span class="digit">7</span></div>
-          <div class="tileDemo demo-bomb" title="Revealed bomb"></div>
-        </div>
+    <aside class="panel panel--aside">
+      <h3>Number</h3>
+      <div class="numpad" id="numpad"></div>
+      <div class="row">
+        <button id="confirm" class="confirm" title="Confirm on selected tile">Confirm</button>
+        <button id="flagBtn" title="Toggle flag mode">⚑ Flag</button>
+        <button id="markBtn" class="markBtn" title="Toggle mark mode (yellow)">✎ Mark</button>
+        <button id="removeFlagBtn" class="removeFlag" title="Remove flag on selected tile" disabled>✖ Remove
+          Flag</button>
+        <button id="removeMarkBtn" class="removeMark" title="Remove mark on selected tile" disabled>✖ Remove
+          Mark</button>
       </div>
-    </details>
 
-    <!-- ⚙️ Config -->
-    <details class="block" id="configPanel">
-      <summary>⚙️ Configure Mode (Custom unlocks inputs)</summary>
-      <div class="cfggrid">
-        <div class="cfgitem">
-          <h4>Lives: <span class="val" id="valLives">3</span></h4>
-          <input type="range" id="cfgLives" min="1" max="7" step="1" value="3" />
-        </div>
-        <div class="cfgitem">
-          <h4>Bomb Ratio: <span class="val" id="valBombRatio">0.13</span></h4>
-          <input type="range" id="cfgBombRatio" min="0.08" max="0.30" step="0.01" value="0.13" />
-          <div class="inlineHelp">% of cells that are bombs (0.13 ≈ 10–12 bombs).</div>
-        </div>
-        <div class="cfgitem">
-          <h4>Start Clues Target: <span class="val" id="valStartClues">26</span></h4>
-          <input type="range" id="cfgStartClues" min="6" max="45" step="1" value="26" />
-          <div class="inlineHelp">Minimum count of clue tiles shown at start.</div>
-        </div>
-        <div class="cfgitem">
-          <h4>Start Givens (Total): <span class="val" id="valStartGivens">52</span></h4>
-          <input type="range" id="cfgStartGivens" min="10" max="65" step="1" value="52" />
-          <div class="inlineHelp">Total tiles revealed at start (clues &amp; normals; never bombs).</div>
-        </div>
-        <div class="cfgitem">
-          <h4>Max Adj for Start: <span class="val" id="valMaxAdj">2</span></h4>
-          <input type="range" id="cfgMaxAdj" min="0" max="8" step="1" value="2" />
-          <div class="inlineHelp">Prefer clues with ≤ this many adjacent bombs.</div>
-        </div>
-        <div class="cfgitem switch">
-          <input type="checkbox" id="cfgSpreadRows" checked />
-          <label for="cfgSpreadRows">Spread by Rows</label>
-        </div>
-        <div class="cfgitem switch">
-          <input type="checkbox" id="cfgSpreadBlocks" checked />
-          <label for="cfgSpreadBlocks">Spread by Blocks</label>
-        </div>
-        <div class="cfgitem">
-          <button id="saveCustom">💾 Save Custom</button>
-          <button id="resetCustom">↺ Reset Custom</button>
-        </div>
+      <div class="row row--hint">
+        <small id="asideHint" class="hint">
+          Flag mode: pick a number → Confirm to place a numbered flag (no life loss), or Confirm with no number to place
+          a <b>blank flag</b>. “✖ Remove Flag” clears the flag &amp; its digit.
+        </small>
       </div>
-    </details>
+      <div class="row row--config">
+        <h3>Active Config</h3>
+        <div id="activeConfig" class="kv"></div>
+      </div>
+    </aside>
+  </div>
 
-    <script src="script.js"></script>
-  </body>
+  <!-- 📘 How to Play / Legend -->
+  <details class="block" id="guide">
+    <summary>📘 How to Play, Rules &amp; Legend</summary>
+    <div class="guide__content">
+      <ol>
+        <li><b>Goal:</b> Flag <i>all bombs</i> and reveal all safe digits. Follow <b>Sudoku rules</b> (1–9 in each
+          row/column/3×3 block).</li>
+        <li>
+          <b>Two modes:</b>
+          <ul>
+            <li><b>Reveal mode</b> — pick a number, select a covered tile, hit <b>Confirm</b>.</li>
+            <li><b>Flag mode</b> — click <b>⚑ Flag</b>, pick a number, select a tile, then <b>Confirm</b>.</li>
+          </ul>
+        </li>
+        <li><b>Clue tiles</b> are safe digits where the number also equals the number of bombs in the 8 neighbors.</li>
+        <li><b>Lives &amp; Endings:</b> Wrong reveal digits cost 1 life. Revealing a bomb loses instantly.</li>
+      </ol>
+      <div class="legend">
+        <div class="tileDemo demo-covered" title="Covered tile"></div>
+        <div class="tileDemo demo-normal" title="Revealed normal digit"><span>5</span></div>
+        <div class="tileDemo demo-clue" title="Revealed clue digit (teal)"><span>3</span></div>
+        <div class="tileDemo demo-flag" title="Flag with digit"><span class="digit">7</span></div>
+        <div class="tileDemo demo-bomb" title="Revealed bomb"></div>
+      </div>
+    </div>
+  </details>
+
+  <!-- ⚙️ Config -->
+  <details class="block" id="configPanel">
+    <summary>⚙️ Configure Mode (Custom unlocks inputs)</summary>
+    <div class="cfggrid">
+      <div class="cfgitem">
+        <h4>Lives: <span class="val" id="valLives">3</span></h4>
+        <input type="range" id="cfgLives" min="1" max="7" step="1" value="3" />
+      </div>
+      <div class="cfgitem">
+        <h4>Bomb Ratio: <span class="val" id="valBombRatio">0.13</span></h4>
+        <input type="range" id="cfgBombRatio" min="0.08" max="0.30" step="0.01" value="0.13" />
+        <div class="inlineHelp">% of cells that are bombs (0.13 ≈ 10–12 bombs).</div>
+      </div>
+      <div class="cfgitem">
+        <h4>Start Clues Target: <span class="val" id="valStartClues">26</span></h4>
+        <input type="range" id="cfgStartClues" min="6" max="45" step="1" value="26" />
+        <div class="inlineHelp">Minimum count of clue tiles shown at start.</div>
+      </div>
+      <div class="cfgitem">
+        <h4>Start Givens (Total): <span class="val" id="valStartGivens">52</span></h4>
+        <input type="range" id="cfgStartGivens" min="10" max="65" step="1" value="52" />
+        <div class="inlineHelp">Total tiles revealed at start (clues &amp; normals; never bombs).</div>
+      </div>
+      <div class="cfgitem">
+        <h4>Max Adj for Start: <span class="val" id="valMaxAdj">2</span></h4>
+        <input type="range" id="cfgMaxAdj" min="0" max="8" step="1" value="2" />
+        <div class="inlineHelp">Prefer clues with ≤ this many adjacent bombs.</div>
+      </div>
+      <div class="cfgitem switch">
+        <input type="checkbox" id="cfgSpreadRows" checked />
+        <label for="cfgSpreadRows">Spread by Rows</label>
+      </div>
+      <div class="cfgitem switch">
+        <input type="checkbox" id="cfgSpreadBlocks" checked />
+        <label for="cfgSpreadBlocks">Spread by Blocks</label>
+      </div>
+      <div class="cfgitem">
+        <button id="saveCustom">💾 Save Custom</button>
+        <button id="resetCustom">↺ Reset Custom</button>
+      </div>
+    </div>
+  </details>
+
+  <script src="script.js"></script>
+</body>
+
 </html>
