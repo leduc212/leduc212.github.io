@@ -285,3 +285,25 @@ details.block > summary { cursor: pointer; outline: none; list-style: none; font
   .boardWrap { padding-top: 42px; padding-left: 48px; }
   .cell { font-size: clamp(18px, 6vw, 28px); }
 }
+
+/* Keep the cell fully opaque; only preview content is soft */
+.cell.preview { animation: flicker .9s ease-in-out infinite alternate; }
+
+.cell.preview .preview__digit,
+.cell.preview .preview__note,
+.cell.preview .preview__flagIcon {
+  opacity: .65;            /* soft look */
+  filter: brightness(1.05);
+}
+
+/* Selection ring remains vivid */
+.cell.sel {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;       /* optional: make it tighter */
+}
+
+/* Flicker, unchanged */
+@keyframes flicker {
+  from { filter: brightness(1); transform: translateY(0); }
+  to   { filter: brightness(1.1); transform: translateY(-0.5px); }
+}

@@ -2,29 +2,51 @@
   // ========= Game & UI constants =========
   const SIDE = 9, BASE = 3;
 
+  // Per-mode logic controls (unchanged idea)
   const PRESETS = {
-    story: { lives: 5, bombRatio: 0.16, targetStartClues: 19, targetStartGivens: 40, maxAdjStart: 2, spreadRows: true, spreadBlocks: true, hintRows: 4, hintCols: 4 },
-    normal: { lives: 4, bombRatio: 0.18, targetStartClues: 15, targetStartGivens: 32, maxAdjStart: 3, spreadRows: true, spreadBlocks: true, hintRows: 3, hintCols: 3 },
-    hard: { lives: 3, bombRatio: 0.22, targetStartClues: 9, targetStartGivens: 20, maxAdjStart: 4, spreadRows: true, spreadBlocks: true, hintRows: 2, hintCols: 2 },
-    custom: { lives: 3, bombRatio: 0.14, targetStartClues: 17, targetStartGivens: 36, maxAdjStart: 2, spreadRows: true, spreadBlocks: true, hintRows: 3, hintCols: 3 },
+    story: {
+      lives: 0, bombRatio: 0.16, minStartClues: 10, targetStartGivens: 38, maxAdjStart: 2,
+      spreadRows: true, spreadBlocks: true, hintRows: 4, hintCols: 4,
+      logicEnforcement: "hybrid", maxResidualUnknownCells: 0
+    },
+    normal: {
+      lives: 0, bombRatio: 0.18, minStartClues: 7, targetStartGivens: 32, maxAdjStart: 3,
+      spreadRows: true, spreadBlocks: true, hintRows: 3, hintCols: 3,
+      logicEnforcement: "sudoku_only", maxResidualUnknownCells: 2
+    },
+    hard: {
+      lives: 0, bombRatio: 0.22, minStartClues: 2, targetStartGivens: 28, maxAdjStart: 4,
+      spreadRows: true, spreadBlocks: true, hintRows: 3, hintCols: 3,
+      logicEnforcement: "sudoku_only", maxResidualUnknownCells: 4
+    },
+    custom: {
+      lives: 0, bombRatio: 0.14, minStartClues: 9, targetStartGivens: 36, maxAdjStart: 2,
+      spreadRows: true, spreadBlocks: true, hintRows: 3, hintCols: 3,
+      logicEnforcement: "sudoku_only", maxResidualUnknownCells: 2
+    },
   };
-
-  const LS_KEY = "runic-custom-config-v1";
+  const LS_KEY = "runic-custom-config-v2";
 
   // ========= State =========
   let mode = "story";
-  let solution = [], bombs = [], adj = [], revealed = [], flagged = [], flagNote = [], given = [];
-  let markNote = []; // NEW: stores yellow "mark" digits per tile
-  let lives = 3, bombsTotal = 0, flagsCount = 0;
-  let selected = null, pickedDigit = null, gameOver = false, flagMode = false, markMode = false;
-  let reviewMode = false, didWin = false;
+  let solution = [], bombs = [], adj = [];
+  let revealed = [], flagged = [], flagNote = [], given = [], noteText = [];
+  let bombsTotal = 0, flagsCount = 0;
+  let selected = null, pickedDigit = null, gameOver = false, flagMode = false, noteMode = false;
+  let reviewMode = false, didWin = false, showAllBombs = false;
   let hintedRows = [], hintedCols = [];
   let rowTotals = [], colTotals = [];
-  let showAllBombs = false; // reveal bombs on loss regardless of review mode
+
+  // Note composition buffer (per selection)
+  let noteBuffer = "";
+
+  // NEW: per-tile real-time preview (not committed)
+  // { kind: 'number'|'note'|'flag'|null, value: string|number|null, r:number, c:number }
+  let preview = { kind: null, value: null, r: -1, c: -1 };
 
   // ========= DOM =========
   const boardEl = document.getElementById("board");
-  const livesEl = document.getElementById("lives");
+  const livesEl = document.getElementById("lives"); // unused visually
   const bombsLeftEl = document.getElementById("bombsLeft");
   const flagsCntEl = document.getElementById("flagsCnt");
   const statusEl = document.getElementById("status");
@@ -33,7 +55,7 @@
   const numpadEl = document.getElementById("numpad");
   const confirmBtn = document.getElementById("confirm");
   const flagBtn = document.getElementById("flagBtn");
-  const markBtn = document.getElementById("markBtn");
+  const markBtn = document.getElementById("markBtn"); // Note mode toggle
   const removeFlagBtn = document.getElementById("removeFlagBtn");
   const removeMarkBtn = document.getElementById("removeMarkBtn");
   const asideHint = document.getElementById("asideHint");
@@ -62,7 +84,7 @@
   const colHL = document.createElement("div"); colHL.id = "colHL"; colHL.className = "hlStripe";
   boardWrapEl.appendChild(rowHL); boardWrapEl.appendChild(colHL);
 
-  // ========= Review toggle (bugfix: always exits/enters) =========
+  // ========= Review toggle =========
   reviewBtn.addEventListener("click", () => {
     if (!gameOver) return;
     reviewMode = !reviewMode;
@@ -117,31 +139,24 @@
   }
   function tileType(r, c) { return bombs[r][c] ? "bomb" : (solution[r][c] === adj[r][c] ? "clue" : "normal"); }
 
-  // Encourage each bomb to have at least two neighboring clue supports
-  function ensureBombHasTwoSupports(maxPasses = 2) {
+  function ensureBombHasTwoSupports(maxPasses = 1) {
     const countClueNeighbors = (r, c, A = adj) =>
       neighbors8(r, c).reduce((n, [rr, cc]) => n + (!bombs[rr][cc] && solution[rr][cc] === A[rr][cc] ? 1 : 0), 0);
-
     for (let pass = 0; pass < maxPasses; pass++) {
       let moved = false;
       for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) {
         if (!bombs[r][c]) continue;
         const supports = countClueNeighbors(r, c, adj);
         if (supports >= 2) continue;
-
         let best = null, bestScore = -1;
         for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) {
           const rr = r + dr, cc = c + dc;
           if (!inBounds(rr, cc) || bombs[rr][cc]) continue;
-
           bombs[r][c] = false; bombs[rr][cc] = true;
           const A = computeAdj(bombs);
           const sup = countClueNeighbors(rr, cc, A);
           let score = sup >= 2 ? 1000 : 0;
-          if (score) {
-            for (let i = 0; i < SIDE; i++) for (let j = 0; j < SIDE; j++)
-              if (!bombs[i][j] && solution[i][j] === A[i][j]) score++;
-          }
+          if (score) { for (let i = 0; i < SIDE; i++) for (let j = 0; j < SIDE; j++) if (!bombs[i][j] && solution[i][j] === A[i][j]) score++; }
           bombs[r][c] = true; bombs[rr][cc] = false;
           if (score > bestScore) { bestScore = score; best = [rr, cc]; }
         }
@@ -151,155 +166,126 @@
     }
   }
 
-  // ========= Picking initial givens (clues + some normals) — stratified blue-noise with quotas =========
+  function countAllClues() {
+    let n = 0;
+    for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) if (!bombs[r][c] && solution[r][c] === adj[r][c]) n++;
+    return n;
+  }
+
+  // ========= Starting givens (spread) =========
   function chooseGivensPatterned(cfg) {
     const totalTarget = Math.min(cfg.targetStartGivens || 27, SIDE * SIDE - 1);
-    const clueTarget = Math.min(cfg.targetStartClues || 15, totalTarget);
+    const minClues = Math.max(0, Math.min(cfg.minStartClues || 0, totalTarget));
 
-    // Build candidate pools
-    const clueCells = [];
-    const safeCells = [];
+    const clueCellsAll = [], safeCells = [];
     for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) {
       if (bombs[r][c]) continue;
       const isClue = solution[r][c] === adj[r][c];
-      (isClue ? clueCells : safeCells).push({ r, c, isClue });
+      (isClue ? clueCellsAll : safeCells).push({ r, c, isClue, adj: adj[r][c] });
     }
 
-    // Pre-shuffle to avoid deterministic tie bias (e.g., row 0 winning ties)
-    shuffle(clueCells);
-    shuffle(safeCells);
+    const preferredClues = clueCellsAll.filter(p => p.adj <= (cfg.maxAdjStart ?? 2));
+    const relaxedClues = clueCellsAll.filter(p => p.adj > (cfg.maxAdjStart ?? 2)).sort((a, b) => a.adj - b.adj);
+    const cluePool = [...preferredClues];
+    for (const p of relaxedClues) { if (cluePool.length >= minClues) break; cluePool.push(p); }
+    shuffle(cluePool); shuffle(safeCells);
 
     const blockId = (r, c) => Math.floor(r / 3) * 3 + Math.floor(c / 3);
+    const dist = (a, b) => Math.hypot(a.r - b.r, a.c - b.c);
 
-    // Hard caps (start strict, relax if needed)
-    const rowCapBase = Math.floor(totalTarget / SIDE);           // even share
+    const rowCapBase = Math.floor(totalTarget / SIDE);
     const colCapBase = rowCapBase;
-    const blockCapBase = Math.ceil(totalTarget / 9);               // per 3x3 block
+    const blockCapBase = Math.ceil(totalTarget / 9);
 
-    let rowCap = rowCapBase + 1; // allow slight slack from start
-    let colCap = colCapBase + 1;
-    let blockCap = Math.max(2, blockCapBase); // avoid too strict blocks
-
-    const perRow = Array(SIDE).fill(0);
-    const perCol = Array(SIDE).fill(0);
-    const perBlk = Array(9).fill(0);
-
-    // Distance helper
-    const dist = (a, b) => {
-      const dr = a.r - b.r, dc = a.c - b.c;
-      return Math.hypot(dr, dc);
-    };
-
+    let rowCap = rowCapBase + 1, colCap = colCapBase + 1, blockCap = Math.max(2, blockCapBase);
+    const perRow = Array(SIDE).fill(0), perCol = Array(SIDE).fill(0), perBlk = Array(9).fill(0);
     const picked = [];
 
-    // ---- Quadrant seeding: prefer clues in each quadrant, else safe ----
-    const quads = [
-      { r0: 0, c0: 0 }, { r0: 0, c0: 3 }, { r0: 0, c0: 6 },
-      { r0: 3, c0: 0 }, { r0: 3, c0: 3 }, { r0: 3, c0: 6 },
-      { r0: 6, c0: 0 }, { r0: 6, c0: 3 }, { r0: 6, c0: 6 }
-    ];
-    // We’ll take up to 4 diverse seeds (one per far-apart blocks)
-    const seedBlocks = shuffle([0, 2, 6, 8]); // corners by block index
-    for (const b of seedBlocks) {
-      const r0 = Math.floor(b / 3) * 3, c0 = (b % 3) * 3;
-      const inBlock = (arr) => arr.filter(p => Math.floor(p.r / 3) === Math.floor(r0 / 3) && Math.floor(p.c / 3) === Math.floor(c0 / 3));
-      let cand = inBlock(clueCells);
-      if (cand.length === 0) cand = inBlock(safeCells);
+    // seed across distant blocks
+    for (const b of shuffle([0, 2, 6, 8])) {
+      const inBlk = (arr) => arr.filter(p => blockId(p.r, p.c) === b);
+      let cand = inBlk(cluePool); if (!cand.length) cand = inBlk(safeCells);
       if (cand.length) {
-        const p = cand[0];
-        picked.push(p);
+        const p = cand[0]; picked.push(p);
         perRow[p.r]++; perCol[p.c]++; perBlk[blockId(p.r, p.c)]++;
-        // remove from candidate pools
         const rm = (arr, q) => { const i = arr.findIndex(x => x.r === q.r && x.c === q.c); if (i >= 0) arr.splice(i, 1); };
-        rm(clueCells, p); rm(safeCells, p);
+        rm(cluePool, p); rm(safeCells, p);
         if (picked.length >= Math.min(4, totalTarget)) break;
       }
     }
 
-    // ---- Scored selection with quotas & blue-noise spread ----
-    function takeFromPool(pool, need, allowRelax = true) {
+    function takeWithSpread(pool, need, preferClues = false, allowRelax = true) {
       let taken = 0;
-      const W_DIST = 10;               // distance importance
-      const W_ISCLUE = 2.0;            // prefer clues slightly (pool will be clue first)
-      const W_LOWADJ = 0.8;            // gentle nudge for “easy” clues
-      const ROW_BIAS = 0.6;            // penalize overused row/col
-      const COL_BIAS = 0.6;
-      const BLK_BIAS = 0.8;
-
+      const W_DIST = 10, W_ISCLUE = preferClues ? 2.0 : 0.0, W_LOWADJ = 0.8;
+      const ROW_BIAS = 0.6, COL_BIAS = 0.6, BLK_BIAS = 0.8;
       while (taken < need && pool.length) {
         let bestIdx = -1, bestScore = -1;
-
         for (let i = 0; i < pool.length; i++) {
-          const cand = pool[i];
-          const r = cand.r, c = cand.c, b = blockId(r, c);
-
-          // hard caps
-          if (perRow[r] >= rowCap) continue;
-          if (perCol[c] >= colCap) continue;
-          if (perBlk[b] >= blockCap) continue;
-
+          const cand = pool[i], r = cand.r, c = cand.c, b = blockId(r, c);
+          if (perRow[r] >= rowCap || perCol[c] >= colCap || perBlk[b] >= blockCap) continue;
           const dmin = picked.length ? Math.min(...picked.map(p => dist(p, cand))) : 99;
-          const lowAdj = !bombs[r][c] && (solution[r][c] === adj[r][c]) && adj[r][c] <= 2;
-          const eps = Math.random() * 0.05; // break ties randomly
-
-          const score =
-            W_DIST * dmin +
-            (cand.isClue ? W_ISCLUE : 0) +
-            (lowAdj ? W_LOWADJ : 0) -
-            ROW_BIAS * perRow[r] -
-            COL_BIAS * perCol[c] -
-            BLK_BIAS * perBlk[b] +
-            eps;
-
+          const lowAdj = cand.isClue && cand.adj <= 2;
+          const score = 10 * dmin + (cand.isClue ? (preferClues ? 2 : 0) : 0) + (lowAdj ? 0.8 : 0) - 0.6 * perRow[r] - 0.6 * perCol[c] - 0.8 * perBlk[b] + Math.random() * 0.05;
           if (score > bestScore) { bestScore = score; bestIdx = i; }
         }
-
-        if (bestIdx === -1) {
-          // Couldn’t place due to caps; relax gradually and retry
-          if (!allowRelax) break;
-          rowCap++; colCap++;
-          if (blockCap < 6) blockCap++; // limited relaxation for blocks
-          continue;
-        }
-
-        const pick = pool.splice(bestIdx, 1)[0];
-        picked.push(pick);
-        perRow[pick.r]++; perCol[pick.c]++; perBlk[blockId(pick.r, pick.c)]++;
-        taken++;
+        if (bestIdx === -1) { if (!allowRelax) break; rowCap++; colCap++; if (blockCap < 6) blockCap++; continue; }
+        const p = pool.splice(bestIdx, 1)[0];
+        picked.push(p); perRow[p.r]++; perCol[p.c]++; perBlk[blockId(p.r, p.c)]++; taken++;
       }
       return taken;
     }
 
-    // 1) Take spread-out clues up to clueTarget (but not exceeding totalTarget)
-    const needClues = Math.min(clueTarget, totalTarget) - picked.length;
-    if (needClues > 0) takeFromPool(clueCells, needClues);
+    const needClues = Math.max(0, minClues - picked.filter(p => p.isClue).length);
+    if (needClues > 0) takeWithSpread(cluePool, needClues, true);
 
-    // 2) Fill remaining with safe cells, spread too
     const remaining = Math.max(0, totalTarget - picked.length);
-    if (remaining > 0) takeFromPool(safeCells, remaining);
+    if (remaining > 0) {
+      const takeClues = Math.min(remaining, cluePool.length);
+      if (takeClues > 0) takeWithSpread(cluePool, takeClues, true);
+      const left2 = Math.max(0, totalTarget - picked.length);
+      if (left2 > 0) takeWithSpread(safeCells, left2, false);
+    }
 
-    // Build givens matrix
     const g = Array.from({ length: SIDE }, () => Array(SIDE).fill(false));
     for (const p of picked) g[p.r][p.c] = true;
-    const clues = picked.filter(p => p.isClue).length;
-
-    return { g, clues };
+    return { g };
   }
 
+  // ========= Gutters =========
+  function selectRowColHints(cfg) {
+    rowTotals = Array.from({ length: SIDE }, (_, r) => bombs[r].reduce((s, x) => s + (x ? 1 : 0), 0));
+    colTotals = Array.from({ length: SIDE }, (_, c) => { let s = 0; for (let r = 0; r < SIDE; r++) if (bombs[r][c]) s++; return s; });
 
-  function passesSimpleLogicTest(g) {
-    for (let i = 0; i < SIDE; i++) {
-      let rowOk = false, colOk = false;
-      for (let j = 0; j < SIDE; j++) {
-        if (g[i][j] && !bombs[i][j]) rowOk = true;
-        if (g[j][i] && !bombs[j][i]) colOk = true;
-      }
-      if (!rowOk || !colOk) return false;
+    const isClueCell = (r, c) => !bombs[r][c] && (solution[r][c] === adj[r][c]);
+    const hasAdjacentClue = (r, c) => neighbors8(r, c).some(([rr, cc]) => isClueCell(rr, cc));
+
+    const hardBombRowCount = Array(SIDE).fill(0);
+    const hardBombColCount = Array(SIDE).fill(0);
+    for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) if (bombs[r][c] && !hasAdjacentClue(r, c)) { hardBombRowCount[r]++; hardBombColCount[c]++; }
+
+    const lowAdjClueRow = Array(SIDE).fill(0);
+    const lowAdjClueCol = Array(SIDE).fill(0);
+    for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) if (isClueCell(r, c) && adj[r][c] <= 2) { lowAdjClueRow[r]++; lowAdjClueCol[c]++; }
+
+    const infoWeight = 10, hardWeight = 6, lowAdjWeight = 1.5, trivialPenalty = -6;
+    const rowScore = (r) => ((rowTotals[r] === 0 || rowTotals[r] === SIDE) ? trivialPenalty : infoWeight) + hardWeight * hardBombRowCount[r] + lowAdjWeight * lowAdjClueRow[r];
+    const colScore = (c) => ((colTotals[c] === 0 || colTotals[c] === SIDE) ? trivialPenalty : infoWeight) + hardWeight * hardBombColCount[c] + lowAdjWeight * lowAdjClueCol[c];
+
+    const rowIdx = Array.from({ length: SIDE }, (_, i) => i).sort((a, b) => rowScore(b) - rowScore(a));
+    const colIdx = Array.from({ length: SIDE }, (_, i) => i).sort((a, b) => colScore(b) - colScore(a));
+
+    function pickSpread(idxs, k) {
+      const chosen = [];
+      for (const i of idxs) { if (chosen.length >= k) break; if (chosen.some((x) => Math.abs(x - i) <= 1)) continue; chosen.push(i); }
+      for (const i of idxs) { if (chosen.length >= k) break; if (!chosen.includes(i)) chosen.push(i); }
+      return chosen.slice(0, k);
     }
-    return true;
+
+    hintedRows = pickSpread(rowIdx, Math.min(cfg.hintRows || 0, SIDE));
+    hintedCols = pickSpread(colIdx, Math.min(cfg.hintCols || 0, SIDE));
+    renderRowColHintsOverlay();
   }
 
-  // ========= Row/Col hints (gutters) =========
   function getBoardMetrics() {
     const wrapRect = boardWrapEl.getBoundingClientRect();
     const boardRect = boardEl.getBoundingClientRect();
@@ -321,7 +307,6 @@
     const rowEl = document.getElementById("rowHintsOverlay");
     const colEl = document.getElementById("colHintsOverlay");
     rowEl.innerHTML = ""; colEl.innerHTML = "";
-
     const { originX, originY, cellW, cellH } = getBoardMetrics();
 
     hintedRows.forEach((r) => {
@@ -347,75 +332,68 @@
     });
   }
 
-  function renderLives() {
-    livesEl.innerHTML = "";
-    const maxL = getActiveConfig().lives;
-    for (let i = 0; i < maxL; i++) {
-      const h = document.createElement("div");
-      h.className = "heart" + (i < lives ? " on" : "");
-      livesEl.appendChild(h);
-    }
-  }
-
-  function setStatus(msg, cls) {
-    statusEl.className = "status " + (cls || "");
-    statusEl.textContent = msg;
-  }
-
+  // ========= Rendering helpers =========
+  function renderLives() { livesEl.innerHTML = ""; }
+  function setStatus(msg, cls) { statusEl.className = "status " + (cls || ""); statusEl.textContent = msg; }
   function updateStats() {
     const notFlagged = bombsTotal - countCorrectFlags();
     bombsLeftEl.textContent = "💣 " + String(Math.max(0, notFlagged));
     flagsCntEl.textContent = String(flagsCount);
   }
-
-  function countCorrectFlags() {
-    let ok = 0; for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) if (bombs[r][c] && flagged[r][c]) ok++;
-    return ok;
-  }
-
-  function isWin() {
-    for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) {
-      if (bombs[r][c] && !flagged[r][c]) return false;
-      if (!bombs[r][c] && !revealed[r][c]) return false;
-    }
-    return true;
-  }
-
-  function loseLife() { lives--; renderLives(); if (lives <= 0) endGame(false, "No lives left."); }
-
+  function countCorrectFlags() { let ok = 0; for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) if (bombs[r][c] && flagged[r][c]) ok++; return ok; }
+  function isWin() { for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) if (!bombs[r][c] && !revealed[r][c]) return false; return true; }
   function endGame(win, msg) {
     gameOver = true; didWin = !!win;
-    if (win) {
-      showAllBombs = false;
-      setStatus("You win! " + (msg || ""), "win");
-      reviewBtn.style.display = "none";
-    } else {
-      showAllBombs = true;  // reveal all bombs immediately on loss
-      setStatus("You lose! " + (msg || ""), "lose");
-      reviewBtn.style.display = "inline-block";
-      reviewBtn.textContent = reviewMode ? "◼ Exit Review" : "👁 Review Board";
-    }
+    if (win) { showAllBombs = false; setStatus("You win! " + (msg || ""), "win"); reviewBtn.style.display = "none"; }
+    else { showAllBombs = true; setStatus("You lose! " + (msg || ""), "lose"); reviewBtn.style.display = "inline-block"; reviewBtn.textContent = reviewMode ? "◼ Exit Review" : "👁 Review Board"; }
     renderBoard();
   }
 
-  // ========= Rendering =========
+  // ========= PREVIEW helpers =========
+  function clearPreview() {
+    // Repaint the old previewed cell so the ghost disappears
+    const had = preview && preview.kind && preview.r >= 0 && preview.c >= 0;
+    const pr = had ? { r: preview.r, c: preview.c } : null;
+    preview = { kind: null, value: null, r: -1, c: -1 };
+    if (pr) renderCell(pr.r, pr.c);
+  }
+
+  function setPreviewForSelected() {
+    if (!selected || gameOver) { clearPreview(); return; }
+    const { r, c } = selected;
+    if (revealed[r][c] || given[r][c]) { clearPreview(); return; }
+
+    if (noteMode && noteBuffer) {
+      preview = { kind: "note", value: noteBuffer, r, c };
+    } else if (flagMode) {
+      preview = { kind: "flag", value: (pickedDigit ?? null), r, c };
+    } else if (!noteMode && !flagMode && pickedDigit != null) {
+      preview = { kind: "number", value: pickedDigit, r, c };
+    } else {
+      clearPreview();
+      return; // nothing to show
+    }
+    renderCell(r, c);
+    highlightSelected();
+  }
+
+
+  // ========= Painting =========
   function paintCell(div, r, c) {
     div.innerHTML = "";
     div.className = "cell";
     div.dataset.r = r; div.dataset.c = c;
-
-    // District borders (thick lines every 3 cells)
     if ((c + 1) % 3 === 0 && c !== SIDE - 1) div.classList.add("bRight");
     if ((r + 1) % 3 === 0 && r !== SIDE - 1) div.classList.add("bBottom");
 
     const isRev = revealed[r][c], isFlag = flagged[r][c], type = tileType(r, c);
 
-    // post-loss bombs always visible (even outside review)
+    // Show all bombs on loss
     if (gameOver && !didWin && showAllBombs && bombs[r][c] && !isRev) {
       const m = document.createElement("div"); m.className = "bombmark"; m.textContent = "💣"; div.appendChild(m);
     }
 
-    // review mode: show everything + correctness
+    // Review mode shows hidden infos
     if (reviewMode && gameOver) {
       if (!isRev) {
         if (bombs[r][c]) {
@@ -426,10 +404,7 @@
           div.textContent = solution[r][c];
         }
       }
-      if (isFlag) {
-        if (bombs[r][c]) div.classList.add("flagRight");
-        else div.classList.add("flagWrong");
-      }
+      if (isFlag) { if (bombs[r][c]) div.classList.add("flagRight"); else div.classList.add("flagWrong"); }
     }
 
     if (isRev) {
@@ -440,23 +415,51 @@
         div.textContent = solution[r][c];
         if (given[r][c]) div.classList.add("given");
       }
-    } else {
-      div.classList.add("covered");
+      return;
+    }
 
-      // Flag (takes precedence over mark visual)
-      if (isFlag) {
-        div.classList.add("flag");
-        const note = flagNote[r]?.[c];
-        if (note) { const big = document.createElement("div"); big.className = "flagDigit"; big.textContent = note; div.appendChild(big); }
-      } else {
-        // Mark (yellow)
-        const m = markNote[r]?.[c];
-        if (m != null) {
-          div.classList.add("mark");
-          const md = document.createElement("div");
-          md.className = "markDigit";
-          md.textContent = m;
-          div.appendChild(md);
+    // Covered state
+    div.classList.add("covered");
+
+    // Committed decorations (flag/note)
+    if (isFlag) {
+      div.classList.add("flag");
+      const note = flagNote[r]?.[c];
+      if (note) { const big = document.createElement("div"); big.className = "flagDigit"; big.textContent = note; div.appendChild(big); }
+    } else {
+      const m = noteText[r]?.[c];
+      if (m) {
+        div.classList.add("mark");
+        const md = document.createElement("div");
+        md.className = "markDigit";
+        md.textContent = m;
+        div.appendChild(md);
+      }
+    }
+
+    // --- LIVE PREVIEW (only for currently selected tile, not committed) ---
+    if (selected && selected.r === r && selected.c === c && preview.kind && !gameOver) {
+      div.classList.add("preview");
+      if (preview.kind === "number") {
+        const pd = document.createElement("div");
+        pd.className = "preview__digit";
+        pd.textContent = preview.value;
+        div.appendChild(pd);
+      } else if (preview.kind === "note") {
+        const pn = document.createElement("div");
+        pn.className = "preview__note";
+        pn.textContent = String(preview.value);
+        div.appendChild(pn);
+      } else if (preview.kind === "flag") {
+        const pfIcon = document.createElement("div");
+        pfIcon.className = "preview__flagIcon";
+        pfIcon.textContent = "⚑";
+        div.appendChild(pfIcon);
+        if (preview.value != null) {
+          const pfNum = document.createElement("div");
+          pfNum.className = "preview__digit";
+          pfNum.textContent = preview.value;
+          div.appendChild(pfNum);
         }
       }
     }
@@ -475,38 +478,41 @@
     updateRemoveButtons();
     requestAnimationFrame(renderRowColHintsOverlay);
   }
-
   function renderCell(r, c) {
     const idx = r * SIDE + c, div = boardEl.children[idx];
     if (!div) return;
     paintCell(div, r, c);
     updateRemoveButtons();
+    highlightSelected();
   }
 
   // ========= Selection & input =========
   function hideHL() { rowHL.style.display = "none"; colHL.style.display = "none"; }
-  function showRowHL(r) {
-    const { originX, originY, innerW, cellH } = getBoardMetrics();
-    rowHL.style.display = "block";
-    rowHL.style.left = originX + "px"; rowHL.style.top = originY + r * cellH + "px";
-    rowHL.style.width = innerW + "px"; rowHL.style.height = cellH + "px";
-    colHL.style.display = "none";
-  }
-  function showColHL(c) {
-    const { originX, originY, innerH, cellW } = getBoardMetrics();
-    colHL.style.display = "block";
-    colHL.style.left = originX + c * cellW + "px"; colHL.style.top = originY + "px";
-    colHL.style.width = cellW + "px"; colHL.style.height = innerH + "px";
-    rowHL.style.display = "none";
-  }
+  function showRowHL(r) { const { originX, originY, innerW, cellH } = getBoardMetrics(); rowHL.style.display = "block"; rowHL.style.left = originX + "px"; rowHL.style.top = originY + r * cellH + "px"; rowHL.style.width = innerW + "px"; rowHL.style.height = cellH + "px"; colHL.style.display = "none"; }
+  function showColHL(c) { const { originX, originY, innerH, cellW } = getBoardMetrics(); colHL.style.display = "block"; colHL.style.left = originX + c * cellW + "px"; colHL.style.top = originY + "px"; colHL.style.width = cellW + "px"; colHL.style.height = innerH + "px"; rowHL.style.display = "none"; }
 
   function setSelected(r, c) {
     if (gameOver) return;
-    selected = { r, c }; highlightSelected();
+
+    // 1) Remove any old preview from previous tile
+    clearPreview();
+
+    // 2) Move selection
+    selected = { r, c };
+
+    // 3) Reset in-progress inputs for the new tile
+    pickedDigit = null;
+    noteBuffer = "";
+
+    highlightSelected();
     updateHintText();
     updateRemoveButtons();
+
+    // 4) Prepare preview (empty now but this keeps logic consistent)
+    setPreviewForSelected();
   }
-  function clearSelected() { selected = null; highlightSelected(); updateRemoveButtons(); }
+  function clearSelected() { selected = null; clearPreview(); highlightSelected(); updateRemoveButtons(); }
+
   function highlightSelected() {
     for (const ch of boardEl.children) ch.classList.remove("sel");
     if (!selected) return;
@@ -514,54 +520,62 @@
     if (div) div.classList.add("sel");
   }
   function updateRemoveButtons() {
-    if (!selected) {
-      removeFlagBtn.disabled = true; removeMarkBtn.disabled = true; return;
-    }
+    if (!selected) { removeFlagBtn.disabled = true; removeMarkBtn.disabled = true; return; }
     const { r, c } = selected;
     removeFlagBtn.disabled = !flagged[r][c];
-    removeMarkBtn.disabled = !(markNote[r] && markNote[r][c] != null);
+    removeMarkBtn.disabled = !(noteText[r] && noteText[r][c]);
   }
-
   function updateHintText() {
-    if (flagMode) asideHint.textContent = "Flag mode: pick a number → Confirm to place a flag digit (no life loss).";
-    else if (markMode) asideHint.textContent = "Mark mode: pick a number → Confirm to pencil the digit in yellow (no effect on lives).";
-    else asideHint.textContent = "Reveal mode: pick a number → Confirm to reveal (wrong digit costs a life; bomb loses instantly).";
+    if (flagMode) asideHint.textContent = "Flag mode: pick (optional) a digit for the flag; preview shows softly; Confirm to commit.";
+    else if (noteMode) asideHint.textContent = `Note mode: tap digits and '/' to compose (e.g. 2/3); preview shows; Confirm to place.`;
+    else asideHint.textContent = "Number mode: pick a digit; preview shows on tile; Confirm to place. Wrong guesses have no penalty.";
   }
 
+  // Build numpad (NOTE: add "/" when noteMode)
   function buildNumpad() {
     numpadEl.innerHTML = "";
     for (let n = 1; n <= 9; n++) {
       const b = document.createElement("button");
       b.textContent = n; b.classList.add("numBtn");
       b.addEventListener("click", () => {
-        pickedDigit = (pickedDigit === n) ? null : n;
-        updateNumpadSelection();
+        if (!selected) return;
+        if (noteMode) {
+          if (noteBuffer.length && !noteBuffer.endsWith("/")) noteBuffer += "/";
+          noteBuffer += String(n);
+        } else {
+          pickedDigit = (pickedDigit === n) ? null : n;
+        }
+        setPreviewForSelected();
       });
       numpadEl.appendChild(b);
     }
-    updateNumpadSelection();
-  }
-  function updateNumpadSelection() {
-    const btns = numpadEl.querySelectorAll(".numBtn");
-    btns.forEach((btn) => btn.classList.remove("sel"));
-    if (pickedDigit != null) { const idx = pickedDigit - 1; if (btns[idx]) btns[idx].classList.add("sel"); }
+    const slashBtn = document.createElement("button");
+    slashBtn.textContent = "/";
+    slashBtn.addEventListener("click", () => {
+      if (!selected || !noteMode) return;
+      if (noteBuffer.length && !noteBuffer.endsWith("/")) noteBuffer += "/";
+      setPreviewForSelected();
+    });
+    slashBtn.style.fontWeight = "900";
+    if (noteMode) numpadEl.appendChild(slashBtn);
   }
 
-  // Mode toggles
   flagBtn.addEventListener("click", () => {
-    flagMode = !flagMode; if (flagMode) markMode = false;
+    flagMode = !flagMode; if (flagMode) { noteMode = false; }
     flagBtn.classList.toggle("flagModeOn", flagMode);
     markBtn.classList.remove("markModeOn");
     setStatus(flagMode ? "Flag mode ON." : "Flag mode OFF.", "hint");
-    updateHintText();
+    // Reset per-tile inputs on mode change for clarity
+    pickedDigit = null; noteBuffer = ""; setPreviewForSelected();
+    updateHintText(); buildNumpad();
   });
-
   markBtn.addEventListener("click", () => {
-    markMode = !markMode; if (markMode) flagMode = false;
-    markBtn.classList.toggle("markModeOn", markMode);
+    noteMode = !noteMode; if (noteMode) { flagMode = false; }
+    markBtn.classList.toggle("markModeOn", noteMode);
     flagBtn.classList.remove("flagModeOn");
-    setStatus(markMode ? "Mark mode ON." : "Mark mode OFF.", "hint");
-    updateHintText();
+    setStatus(noteMode ? "Note mode ON." : "Note mode OFF.", "hint");
+    pickedDigit = null; noteBuffer = ""; setPreviewForSelected();
+    updateHintText(); buildNumpad();
   });
 
   removeFlagBtn.addEventListener("click", () => {
@@ -572,144 +586,165 @@
     if (flagNote[r]) flagNote[r][c] = null;
     flagsCount = Math.max(0, flagsCount - 1);
     renderCell(r, c); updateStats();
-    if (flagNote[r][c] == null) { pickedDigit = null; updateNumpadSelection(); }
     setStatus("Flag removed.", "hint");
   });
-
   removeMarkBtn.addEventListener("click", () => {
     if (gameOver || !selected) return;
     const { r, c } = selected;
-    if (!(markNote[r] && markNote[r][c] != null)) return;
-    markNote[r][c] = null;
+    if (!(noteText[r] && noteText[r][c])) return;
+    noteText[r][c] = "";
     renderCell(r, c);
-    setStatus("Mark removed.", "hint");
+    setStatus("Note cleared.", "hint");
   });
 
-  // Confirm button: acts based on current mode
   confirmBtn.addEventListener("click", () => {
     if (gameOver) return;
-    if (!selected) { setStatus("Select a covered tile first.", "lose"); return; }
+    if (!selected) { setStatus("Select a tile first.", "lose"); return; }
     const { r, c } = selected;
 
-    if (revealed[r][c]) { setStatus("Tile already revealed.", "lose"); bumpCell(r, c); return; }
+    if (given[r][c] || revealed[r][c]) { setStatus("This tile is already confirmed.", "lose"); bumpCell(r, c); return; }
 
-    // MARK MODE
-    if (markMode) {
-      if (!pickedDigit) { setStatus("Pick a number 1–9, then Confirm to mark.", "lose"); bumpCell(r, c); return; }
-      if (!markNote[r]) markNote[r] = [];
-      markNote[r][c] = pickedDigit;
-      renderCell(r, c);
-      setStatus("Digit marked in yellow (no life effect).", "hint");
+    // Commit according to preview/mode
+    if (noteMode) {
+      if (!noteBuffer) { setStatus("Compose a note with digits and '/'.", "lose"); bumpCell(r, c); return; }
+      if (!noteText[r]) noteText[r] = [];
+      noteText[r][c] = noteBuffer;
+      noteBuffer = "";
+      setStatus("Note placed.", "hint");
+      clearPreview(); renderCell(r, c);
       return;
     }
 
-    // FLAG MODE
     if (flagMode) {
       if (!flagged[r][c]) { flagged[r][c] = true; flagsCount++; }
       if (!flagNote[r]) flagNote[r] = [];
-      flagNote[r][c] = pickedDigit ?? null; // allow blank flag
-      // clear any mark if present
-      if (markNote[r]) markNote[r][c] = null;
-      renderCell(r, c); updateStats();
+      flagNote[r][c] = pickedDigit ?? null;
+      if (noteText[r]) noteText[r][c] = "";
       setStatus(flagNote[r][c] == null ? "Blank flag placed." : "Flag placed.", "hint");
-      if (isWin()) endGame(true, "All bombs flagged & safe tiles revealed!");
+      clearPreview(); renderCell(r, c); updateStats();
+      if (isWin()) endGame(true, "All safe tiles confirmed!");
       return;
     }
 
-    // REVEAL MODE
-    if (!pickedDigit) { setStatus("Pick a number 1–9, then Confirm.", "lose"); bumpCell(r, c); return; }
+    // Number mode
+    if (bombs[r][c]) { endGame(false, "You touched a bomb."); return; }
+    if (pickedDigit == null) { setStatus("Pick a number 1–9, then Confirm.", "lose"); bumpCell(r, c); return; }
 
-    if (bombs[r][c]) { endGame(false, "You revealed a bomb."); return; }
-    if (pickedDigit !== solution[r][c]) { loseLife(); if (!gameOver) setStatus(`Wrong digit. Life -1.`, "lose"); return; }
-
-    revealed[r][c] = true;
-    // clear any mark on reveal
-    if (markNote[r]) markNote[r][c] = null;
-    renderCell(r, c);
-    if (isWin()) endGame(true, "All bombs flagged & safe tiles revealed!");
-    else setStatus("Nice! Keep chaining logic from the anchors.");
+    if (pickedDigit === solution[r][c]) {
+      revealed[r][c] = true;
+      if (noteText[r]) noteText[r][c] = "";
+      setStatus("Correct!", "hint");
+      clearPreview(); renderCell(r, c);
+      if (isWin()) endGame(true, "All safe tiles confirmed!");
+    } else {
+      setStatus("Wrong number. Try another.", "lose");
+      // keep covered; preview cleared so player chooses again
+      pickedDigit = null; clearPreview(); renderCell(r, c);
+    }
   });
 
   function onMouseDownCell(e) {
     const t = e.currentTarget;
     const r = +t.dataset.r, c = +t.dataset.c;
     if (Number.isNaN(r) || Number.isNaN(c)) return;
-    if (e.button === 2) { e.preventDefault(); setStatus("Use Flag/Mark modes with the buttons above.", "hint"); bumpCell(r, c); return; }
-    if (!revealed[r][c]) setSelected(r, c); else clearSelected();
+    if (e.button === 2) { e.preventDefault(); setStatus("Use Flag/Note with the buttons above.", "hint"); bumpCell(r, c); return; }
+    setSelected(r, c);
   }
   function onTouchCell(e) {
     e.preventDefault();
     const t = e.currentTarget; const r = +t.dataset.r, c = +t.dataset.c;
     if (Number.isNaN(r) || Number.isNaN(c)) return;
-    if (!revealed[r][c]) setSelected(r, c); else clearSelected();
+    setSelected(r, c);
   }
-  function bumpCell(r, c) {
-    const idx = r * SIDE + c, el = boardEl.children[idx];
-    if (!el) return; el.classList.add("bad"); setTimeout(() => el.classList.remove("bad"), 200);
-  }
+  function bumpCell(r, c) { const idx = r * SIDE + c, el = boardEl.children[idx]; if (!el) return; el.classList.add("bad"); setTimeout(() => el.classList.remove("bad"), 200); }
 
-  // ========= Row/Col hints (gutters) — prioritize lines with bombs lacking adjacent clues =========
-  function selectRowColHints(cfg) {
-    // Precompute totals
-    rowTotals = Array.from({ length: SIDE }, (_, r) => bombs[r].reduce((s, x) => s + (x ? 1 : 0), 0));
-    colTotals = Array.from({ length: SIDE }, (_, c) => { let s = 0; for (let r = 0; r < SIDE; r++) if (bombs[r][c]) s++; return s; });
+  // ========= Logic solvability evaluator (unchanged behavior) =========
+  function evaluateLogicalSolvability(cfg) {
+    const MODE = cfg.logicEnforcement ?? "sudoku_only";
+    const knownRevealed = Array.from({ length: SIDE }, () => Array(SIDE).fill(false));
+    const knownFlagged = Array.from({ length: SIDE }, () => Array(SIDE).fill(false));
+    for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) if (given[r][c]) knownRevealed[r][c] = true;
 
-    // Identify "hard bombs": bombs with NO adjacent clue cells
-    const isClue = (r, c) => !bombs[r][c] && (solution[r][c] === adj[r][c]);
-    const hasAdjacentClue = (r, c) => neighbors8(r, c).some(([rr, cc]) => isClue(rr, cc));
-
-    const hardBombRowCount = Array(SIDE).fill(0);
-    const hardBombColCount = Array(SIDE).fill(0);
-
-    for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) {
-      if (!bombs[r][c]) continue;
-      if (!hasAdjacentClue(r, c)) {
-        hardBombRowCount[r]++; hardBombColCount[c]++;
+    const cand = Array.from({ length: SIDE }, () => Array.from({ length: SIDE }, () => new Set()));
+    const recompute = () => {
+      for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) {
+        if (bombs[r][c]) { cand[r][c].clear(); continue; }
+        if (knownRevealed[r][c]) { cand[r][c] = new Set([solution[r][c]]); continue; }
+        const s = new Set([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+        for (let cc = 0; cc < SIDE; cc++) if (knownRevealed[r][cc]) s.delete(solution[r][cc]);
+        for (let rr = 0; rr < SIDE; rr++) if (knownRevealed[rr][c]) s.delete(solution[rr][c]);
+        const r0 = Math.floor(r / 3) * 3, c0 = Math.floor(c / 3) * 3;
+        for (let rr = r0; rr < r0 + 3; rr++) for (let cc = c0; cc < c0 + 3; cc++) if (knownRevealed[rr][cc]) s.delete(solution[rr][cc]);
+        cand[r][c] = s;
       }
-    }
-
-    // Also reward lines that have many low-adjacent clues (good anchors)
-    const lowAdjClueRow = Array(SIDE).fill(0);
-    const lowAdjClueCol = Array(SIDE).fill(0);
-    for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) {
-      if (isClue(r, c) && adj[r][c] <= 2) { lowAdjClueRow[r]++; lowAdjClueCol[c]++; }
-    }
-
-    const infoWeight = 10;          // base reward for non-trivial totals
-    const hardWeight = 6;           // prioritize lines with “hard bombs”
-    const lowAdjWeight = 1.5;       // helpful but secondary
-    const trivialPenalty = -6;      // penalize lines with 0 or 9 bombs
-
-    const rowScore = (r) => {
-      const trivial = (rowTotals[r] === 0 || rowTotals[r] === SIDE) ? trivialPenalty : infoWeight;
-      return trivial + hardWeight * hardBombRowCount[r] + lowAdjWeight * lowAdjClueRow[r];
     };
-    const colScore = (c) => {
-      const trivial = (colTotals[c] === 0 || colTotals[c] === SIDE) ? trivialPenalty : infoWeight;
-      return trivial + hardWeight * hardBombColCount[c] + lowAdjWeight * lowAdjClueCol[c];
-    };
+    const reveal = (r, c) => { if (!bombs[r][c]) knownRevealed[r][c] = true; };
+    const flag = (r, c) => { if (!knownRevealed[r][c]) knownFlagged[r][c] = true; };
+    const neighbors8Eval = (r, c) => { const res = []; for (let dr = -1; dr <= 1; dr++)for (let dc = -1; dc <= 1; dc++) { if (!dr && !dc) continue; const rr = r + dr, cc = c + dc; if (rr >= 0 && rr < SIDE && cc >= 0 && cc < SIDE) res.push([rr, cc]); } return res; };
+    const getUnknownN = (r, c) => { const u = [], f = []; for (const [rr, cc] of neighbors8Eval(r, c)) { if (knownFlagged[rr][cc]) f.push([rr, cc]); else if (!knownRevealed[rr][cc]) u.push([rr, cc]); } return { u, f }; };
 
-    const rowIdx = Array.from({ length: SIDE }, (_, i) => i).sort((a, b) => rowScore(b) - rowScore(a));
-    const colIdx = Array.from({ length: SIDE }, (_, i) => i).sort((a, b) => colScore(b) - colScore(a));
-
-    // Keep some spread so we don’t pick adjacent lines only
-    function pickSpread(idxs, k) {
-      const chosen = [];
-      for (const i of idxs) { if (chosen.length >= k) break; if (chosen.some((x) => Math.abs(x - i) <= 1)) continue; chosen.push(i); }
-      for (const i of idxs) { if (chosen.length >= k) break; if (!chosen.includes(i)) chosen.push(i); }
-      return chosen.slice(0, k);
+    function sudokuSingles() {
+      let changed = false;
+      for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) {
+        if (bombs[r][c] || knownRevealed[r][c]) continue;
+        const s = cand[r][c];
+        if (s.size === 1) { reveal(r, c); changed = true; }
+      }
+      for (let r = 0; r < SIDE; r++) for (let n = 1; n <= 9; n++) { const spots = []; for (let c = 0; c < SIDE; c++) if (!bombs[r][c] && !knownRevealed[r][c] && cand[r][c].has(n)) spots.push([r, c]); if (spots.length === 1) { reveal(spots[0][0], spots[0][1]); changed = true; } }
+      for (let c = 0; c < SIDE; c++) for (let n = 1; n <= 9; n++) { const spots = []; for (let r = 0; r < SIDE; r++) if (!bombs[r][c] && !knownRevealed[r][c] && cand[r][c].has(n)) spots.push([r, c]); if (spots.length === 1) { reveal(spots[0][0], spots[0][1]); changed = true; } }
+      for (let br = 0; br < 3; br++) for (let bc = 0; bc < 3; bc++) for (let n = 1; n <= 9; n++) { const spots = []; for (let r = br * 3; r < br * 3 + 3; r++) for (let c = bc * 3; c < bc * 3 + 3; c++) if (!bombs[r][c] && !knownRevealed[r][c] && cand[r][c].has(n)) spots.push([r, c]); if (spots.length === 1) { reveal(spots[0][0], spots[0][1]); changed = true; } }
+      return changed;
     }
 
-    hintedRows = pickSpread(rowIdx, Math.min(cfg.hintRows || 0, SIDE));
-    hintedCols = pickSpread(colIdx, Math.min(cfg.hintCols || 0, SIDE));
-    renderRowColHintsOverlay();
+    let steps = 0; for (; steps < 1000; steps++) { recompute(); if (!sudokuSingles()) break; }
+    const sudokuSolved = (() => { for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) if (!bombs[r][c] && !knownRevealed[r][c]) return false; return true; })();
+    if (!sudokuSolved) return { solvable: false, steps };
+    if ((cfg.logicEnforcement ?? "sudoku_only") === "sudoku_only") return { solvable: true, steps };
+
+    const rowHintAvail = new Set(hintedRows);
+    const colHintAvail = new Set(hintedCols);
+    function clueAdj() {
+      let changed = false;
+      for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) {
+        if (!knownRevealed[r][c]) continue;
+        if (solution[r][c] !== adj[r][c]) continue;
+        const num = solution[r][c];
+        const { u, f } = getUnknownN(r, c);
+        const F = f.length, U = u.length;
+        if (!U) continue;
+        if (F === num) { for (const [rr, cc] of u) { reveal(rr, cc); changed = true; } }
+        else if (F + U === num) { for (const [rr, cc] of u) { flag(rr, cc); changed = true; } }
+      }
+      return changed;
+    }
+    function gutters() {
+      let changed = false;
+      for (const r of rowHintAvail) {
+        let covered = [], F = 0; for (let c = 0; c < SIDE; c++) { if (knownFlagged[r][c]) F++; else if (!knownRevealed[r][c]) covered.push([r, c]); }
+        const need = rowTotals[r], U = covered.length;
+        if (!U) continue;
+        if (F === need) { for (const [rr, cc] of covered) { reveal(rr, cc); changed = true; } }
+        else if (F + U === need) { for (const [rr, cc] of covered) { flag(rr, cc); changed = true; } }
+      }
+      for (const c of colHintAvail) {
+        let covered = [], F = 0; for (let r = 0; r < SIDE; r++) { if (knownFlagged[r][c]) F++; else if (!knownRevealed[r][c]) covered.push([r, c]); }
+        const need = colTotals[c], U = covered.length;
+        if (!U) continue;
+        if (F === need) { for (const [rr, cc] of covered) { reveal(rr, cc); changed = true; } }
+        else if (F + U === need) { for (const [rr, cc] of covered) { flag(rr, cc); changed = true; } }
+      }
+      return changed;
+    }
+
+    for (let i = 0; i < 1000; i++) { recompute(); const p = sudokuSingles() || clueAdj() || gutters(); if (!p) break; }
+    let residualUnknown = 0; for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) if (!knownRevealed[r][c] && !knownFlagged[r][c]) residualUnknown++;
+    const allowResidual = (cfg.maxResidualUnknownCells ?? 0);
+    if ((cfg.logicEnforcement ?? "sudoku_only") === "hybrid") return { solvable: residualUnknown === 0, steps };
+    return { solvable: residualUnknown <= allowResidual, steps };
   }
-
 
   // ========= Mode/Config helpers =========
-  function loadCustomFromLS() {
-    try { const raw = localStorage.getItem(LS_KEY); if (!raw) return; const cfg = JSON.parse(raw); PRESETS.custom = Object.assign({}, PRESETS.custom, cfg); } catch { }
-  }
+  function loadCustomFromLS() { try { const raw = localStorage.getItem(LS_KEY); if (!raw) return; const cfg = JSON.parse(raw); PRESETS.custom = Object.assign({}, PRESETS.custom, cfg); } catch { } }
   function saveCustomToLS() { localStorage.setItem(LS_KEY, JSON.stringify(PRESETS.custom)); }
   function getActiveConfig() { return Object.assign({}, PRESETS[mode]); }
   function applyConfigInputsEnabled() {
@@ -720,7 +755,7 @@
   function syncInputsFromConfig(cfg) {
     cfgLives.value = cfg.lives; valLives.textContent = cfg.lives;
     cfgBombRatio.value = cfg.bombRatio; valBombRatio.textContent = Number(cfg.bombRatio).toFixed(2);
-    cfgStartClues.value = cfg.targetStartClues; valStartClues.textContent = cfg.targetStartClues;
+    cfgStartClues.value = cfg.minStartClues; valStartClues.textContent = cfg.minStartClues;
     cfgStartGivens.value = cfg.targetStartGivens; valStartGivens.textContent = cfg.targetStartGivens;
     cfgMaxAdj.value = cfg.maxAdjStart; valMaxAdj.textContent = cfg.maxAdjStart;
     cfgSpreadRows.checked = !!cfg.spreadRows; cfgSpreadBlocks.checked = !!cfg.spreadBlocks;
@@ -729,24 +764,29 @@
     PRESETS.custom = {
       lives: parseInt(cfgLives.value, 10),
       bombRatio: +cfgBombRatio.value,
-      targetStartClues: parseInt(cfgStartClues.value, 10),
+      minStartClues: parseInt(cfgStartClues.value, 10),
       targetStartGivens: parseInt(cfgStartGivens.value, 10),
       maxAdjStart: parseInt(cfgMaxAdj.value, 10),
       spreadRows: !!cfgSpreadRows.checked,
       spreadBlocks: !!cfgSpreadBlocks.checked,
+      hintRows: PRESETS.custom.hintRows ?? 3,
+      hintCols: PRESETS.custom.hintCols ?? 3,
+      logicEnforcement: PRESETS.custom.logicEnforcement ?? "sudoku_only",
+      maxResidualUnknownCells: PRESETS.custom.maxResidualUnknownCells ?? 2,
     };
     saveCustomToLS(); renderActiveConfigKV();
   }
   function renderActiveConfigKV() {
     const cfg = getActiveConfig();
     activeConfigEl.textContent = `mode: ${mode}
-lives: ${cfg.lives}
 bombRatio: ${cfg.bombRatio}
-targetStartClues: ${cfg.targetStartClues}
+minStartClues: ${cfg.minStartClues}
 targetStartGivens: ${cfg.targetStartGivens}
 maxAdjForStart: ${cfg.maxAdjStart}
 spreadByRows: ${cfg.spreadRows}
-spreadByBlocks: ${cfg.spreadBlocks}`;
+spreadByBlocks: ${cfg.spreadBlocks}
+logicEnforcement: ${cfg.logicEnforcement}
+maxResidualUnknownCells: ${cfg.maxResidualUnknownCells}`;
   }
   function updateConfigInputsUI() { const cfg = getActiveConfig(); syncInputsFromConfig(cfg); applyConfigInputsEnabled(); renderActiveConfigKV(); }
 
@@ -759,43 +799,65 @@ spreadByBlocks: ${cfg.spreadBlocks}`;
 
   saveCustomBtn.addEventListener("click", () => { syncConfigFromInputs(); setStatus("Custom config saved. New Run to apply.", "win"); });
   resetCustomBtn.addEventListener("click", () => {
-    PRESETS.custom = { ...PRESETS.story };
+    PRESETS.custom = { ...PRESETS.story, lives: 0, bombRatio: 0.14, minStartClues: 9, targetStartGivens: 36, maxAdjStart: 2, hintRows: 3, hintCols: 3, logicEnforcement: "sudoku_only", maxResidualUnknownCells: 2 };
     syncInputsFromConfig(PRESETS.custom); saveCustomToLS(); renderActiveConfigKV();
     setStatus("Custom config reset to defaults.", "hint");
   });
 
   newRunBtn.addEventListener("click", newRun);
 
-  // ========= Board generation =========
+  // ========= New game =========
   function newRun() {
     gameOver = false; didWin = false; reviewMode = false; showAllBombs = false;
-    selected = null; pickedDigit = null; flagsCount = 0; flagMode = false; markMode = false;
-    flagBtn.classList.remove("flagModeOn");
-    markBtn.classList.remove("markModeOn");
-    const cfg = getActiveConfig(); lives = cfg.lives;
+    selected = null; pickedDigit = null; flagsCount = 0; flagMode = false; noteMode = false; noteBuffer = "";
+    flagBtn.classList.remove("flagModeOn"); markBtn.classList.remove("markModeOn"); clearPreview();
 
-    const MAX_TRIES = 25;
-    for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
+    const cfg = getActiveConfig();
+
+    const MAX_BOARD_TRIES = 250;
+    let foundEnoughClues = false, lastClueCount = 0, passedLogic = false;
+
+    for (let attempt = 1; attempt <= MAX_BOARD_TRIES; attempt++) {
       solution = generateSudokuSolved();
-      const bp = placeBombs(cfg.bombRatio); bombs = bp.b; bombsTotal = bp.count; adj = computeAdj(bombs);
-      ensureBombHasTwoSupports(2);
-      const res = chooseGivensPatterned(cfg); given = res.g;
+      const bp = placeBombs(cfg.bombRatio);
+      bombs = bp.b; bombsTotal = bp.count;
+      adj = computeAdj(bombs);
+      ensureBombHasTwoSupports(1);
+      adj = computeAdj(bombs);
+
+      lastClueCount = countAllClues();
+      if (lastClueCount < (cfg.minStartClues || 0)) continue;
+      foundEnoughClues = true;
+
       selectRowColHints(cfg);
 
       revealed = Array.from({ length: SIDE }, () => Array(SIDE).fill(false));
       flagged = Array.from({ length: SIDE }, () => Array(SIDE).fill(false));
       flagNote = Array.from({ length: SIDE }, () => Array(SIDE).fill(null));
-      markNote = Array.from({ length: SIDE }, () => Array(SIDE).fill(null));
+      noteText = Array.from({ length: SIDE }, () => Array(SIDE).fill(""));
+
+      const res = chooseGivensPatterned(cfg);
+      given = res.g;
       for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) if (given[r][c]) revealed[r][c] = true;
 
-      if (passesSimpleLogicTest(given)) break;
-      if (attempt === MAX_TRIES) console.warn("Using last attempt; couldn't guarantee progress this time.");
+      const evalRes = evaluateLogicalSolvability(cfg);
+      if (evalRes.solvable) { passedLogic = true; break; }
     }
 
     renderLives(); renderBoard(); updateStats(); renderActiveConfigKV();
     reviewBtn.style.display = "none";
     reviewBtn.textContent = "👁 Review Board";
-    setStatus("Balanced start. Use yellow ✎ Marks to pencil digits you're not ready to reveal.", "hint");
+
+    if (!foundEnoughClues) {
+      setStatus(`Started with ${lastClueCount} clue tiles (requested ${cfg.minStartClues}). Using the max available for this board.`, "hint");
+    } else if (passedLogic) {
+      const modeText = cfg.logicEnforcement === "hybrid" ? "Hybrid no-guessing" :
+        cfg.logicEnforcement === "sudoku_only" ? "Sudoku-only solvable" : "Randomized";
+      setStatus(`${modeText} board seeded. Good luck!`, "hint");
+    } else {
+      setStatus(`Board generated without full logic certification.`, "warn");
+    }
+
     buildNumpad();
   }
 
