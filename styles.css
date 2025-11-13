@@ -307,3 +307,29 @@ details.block > summary { cursor: pointer; outline: none; list-style: none; font
   from { filter: brightness(1); transform: translateY(0); }
   to   { filter: brightness(1.1); transform: translateY(-0.5px); }
 }
+
+/* Player-entered (revealed) tiles — distinct from givens */
+.cell.entered {
+  background: linear-gradient(180deg, #314357, #253244);
+  box-shadow: inset 0 0 0 2px #ffffff1a, 0 0 0 1px #0006;
+}
+
+/* Optional: gentle warning when the entered digit is wrong */
+.cell.entered.wrong {
+  background: linear-gradient(180deg, #4b3238, #35252a);
+  box-shadow: inset 0 0 0 2px #ff6b6b66;
+}
+
+/* Givens stay visually stronger and locked */
+.cell.given {
+  box-shadow: inset 0 0 0 2px #ffffff12;
+  background: linear-gradient(180deg, #2b3044, #23283b);
+}
+
+.cell.entered.covered:hover,
+.cell.entered.sel {
+  box-shadow: inset 0 0 0 2px var(--accent), 0 0 0 1px #0006;
+  filter: brightness(1.06);
+}
+/* Slightly stronger ghost on editable tiles */
+.cell.entered.preview .preview__digit { opacity: .75; }

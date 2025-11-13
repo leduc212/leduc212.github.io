@@ -5,17 +5,17 @@
   // Per-mode logic controls (unchanged idea)
   const PRESETS = {
     story: {
-      lives: 0, bombRatio: 0.16, minStartClues: 10, targetStartGivens: 38, maxAdjStart: 2,
+      lives: 0, bombRatio: 0.16, minStartClues: 10, targetStartGivens: 40, maxAdjStart: 2,
       spreadRows: true, spreadBlocks: true, hintRows: 4, hintCols: 4,
       logicEnforcement: "hybrid", maxResidualUnknownCells: 0
     },
     normal: {
-      lives: 0, bombRatio: 0.18, minStartClues: 7, targetStartGivens: 32, maxAdjStart: 3,
+      lives: 0, bombRatio: 0.18, minStartClues: 7, targetStartGivens: 36, maxAdjStart: 3,
       spreadRows: true, spreadBlocks: true, hintRows: 3, hintCols: 3,
       logicEnforcement: "sudoku_only", maxResidualUnknownCells: 2
     },
     hard: {
-      lives: 0, bombRatio: 0.22, minStartClues: 2, targetStartGivens: 28, maxAdjStart: 4,
+      lives: 0, bombRatio: 0.22, minStartClues: 2, targetStartGivens: 32, maxAdjStart: 4,
       spreadRows: true, spreadBlocks: true, hintRows: 3, hintCols: 3,
       logicEnforcement: "sudoku_only", maxResidualUnknownCells: 4
     },
@@ -30,7 +30,8 @@
   // ========= State =========
   let mode = "story";
   let solution = [], bombs = [], adj = [];
-  let revealed = [], flagged = [], flagNote = [], given = [], noteText = [];
+  // entry = player's committed digits; revealed = tile has any committed digit (or given)
+  let entry = [], revealed = [], flagged = [], flagNote = [], given = [], noteText = [];
   let bombsTotal = 0, flagsCount = 0;
   let selected = null, pickedDigit = null, gameOver = false, flagMode = false, noteMode = false;
   let reviewMode = false, didWin = false, showAllBombs = false;
@@ -40,7 +41,7 @@
   // Note composition buffer (per selection)
   let noteBuffer = "";
 
-  // NEW: per-tile real-time preview (not committed)
+  // Per-tile live preview (not committed)
   // { kind: 'number'|'note'|'flag'|null, value: string|number|null, r:number, c:number }
   let preview = { kind: null, value: null, r: -1, c: -1 };
 
@@ -341,27 +342,54 @@
     flagsCntEl.textContent = String(flagsCount);
   }
   function countCorrectFlags() { let ok = 0; for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) if (bombs[r][c] && flagged[r][c]) ok++; return ok; }
-  function isWin() { for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) if (!bombs[r][c] && !revealed[r][c]) return false; return true; }
+
+  // NEW: win condition checks committed entries & flagged bomb digits
+  function isWin() {
+    // 1) Safe cells: must be revealed AND entry equals solution
+    for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) {
+      if (!bombs[r][c]) {
+        if (!revealed[r][c]) return false;
+        if ((entry[r][c] | 0) !== solution[r][c]) return false;
+      }
+    }
+    // 2) Bomb cells: must be flagged AND flagNote equals the Sudoku digit for that cell
+    for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) {
+      if (bombs[r][c]) {
+        if (!flagged[r][c]) return false;
+        const want = solution[r][c];
+        const got = flagNote[r]?.[c] ?? null;
+        if (got !== want) return false;
+      }
+    }
+    return true;
+  }
+
   function endGame(win, msg) {
     gameOver = true; didWin = !!win;
-    if (win) { showAllBombs = false; setStatus("You win! " + (msg || ""), "win"); reviewBtn.style.display = "none"; }
-    else { showAllBombs = true; setStatus("You lose! " + (msg || ""), "lose"); reviewBtn.style.display = "inline-block"; reviewBtn.textContent = reviewMode ? "◼ Exit Review" : "👁 Review Board"; }
+    if (win) {
+      showAllBombs = false;
+      setStatus("You win! " + (msg || ""), "win");
+      reviewBtn.style.display = "none";
+    } else {
+      showAllBombs = true;
+      setStatus("You lose! " + (msg || ""), "lose");
+      reviewBtn.style.display = "inline-block";
+      reviewBtn.textContent = reviewMode ? "◼ Exit Review" : "👁 Review Board";
+    }
     renderBoard();
   }
 
   // ========= PREVIEW helpers =========
   function clearPreview() {
-    // Repaint the old previewed cell so the ghost disappears
     const had = preview && preview.kind && preview.r >= 0 && preview.c >= 0;
     const pr = had ? { r: preview.r, c: preview.c } : null;
     preview = { kind: null, value: null, r: -1, c: -1 };
     if (pr) renderCell(pr.r, pr.c);
   }
-
   function setPreviewForSelected() {
     if (!selected || gameOver) { clearPreview(); return; }
     const { r, c } = selected;
-    if (revealed[r][c] || given[r][c]) { clearPreview(); return; }
+    if (revealed[r][c] && given[r][c]) { clearPreview(); return; } // givens locked
 
     if (noteMode && noteBuffer) {
       preview = { kind: "note", value: noteBuffer, r, c };
@@ -371,12 +399,11 @@
       preview = { kind: "number", value: pickedDigit, r, c };
     } else {
       clearPreview();
-      return; // nothing to show
+      return;
     }
     renderCell(r, c);
     highlightSelected();
   }
-
 
   // ========= Painting =========
   function paintCell(div, r, c) {
@@ -410,10 +437,35 @@
     if (isRev) {
       div.classList.add("revealed", type);
       if (type === "bomb") {
-        const m = document.createElement("div"); m.className = "bombmark"; m.textContent = "💣"; div.appendChild(m);
+        const m = document.createElement("div");
+        m.className = "bombmark";
+        m.textContent = "💣";
+        div.appendChild(m);
       } else {
-        div.textContent = solution[r][c];
-        if (given[r][c]) div.classList.add("given");
+        if (given[r][c]) {
+          // Given tiles (locked)
+          div.textContent = solution[r][c];
+          div.classList.add("given");
+        } else {
+          // Player-entered tiles (editable)
+          const committed = entry[r][c] || "";
+          div.classList.add("entered");
+          const isSelected = selected && selected.r === r && selected.c === c;
+          const showPreviewNumber =
+            isSelected && preview.kind === "number" && preview.value != null;
+
+          if (showPreviewNumber) {
+            // ghost the incoming number (low opacity + flicker)
+            div.classList.add("preview");
+            const pd = document.createElement("div");
+            pd.className = "preview__digit";
+            pd.textContent = preview.value;
+            div.appendChild(pd);
+          } else {
+            // show the committed digit normally
+            div.textContent = committed;
+          }
+        }
       }
       return;
     }
@@ -425,7 +477,12 @@
     if (isFlag) {
       div.classList.add("flag");
       const note = flagNote[r]?.[c];
-      if (note) { const big = document.createElement("div"); big.className = "flagDigit"; big.textContent = note; div.appendChild(big); }
+      if (note != null) {
+        const big = document.createElement("div");
+        big.className = "flagDigit";
+        big.textContent = note;
+        div.appendChild(big);
+      }
     } else {
       const m = noteText[r]?.[c];
       if (m) {
@@ -437,7 +494,7 @@
       }
     }
 
-    // --- LIVE PREVIEW (only for currently selected tile, not committed) ---
+    // Live PREVIEW on selected tile
     if (selected && selected.r === r && selected.c === c && preview.kind && !gameOver) {
       div.classList.add("preview");
       if (preview.kind === "number") {
@@ -483,7 +540,7 @@
     if (!div) return;
     paintCell(div, r, c);
     updateRemoveButtons();
-    highlightSelected();
+    highlightSelected(); // keep selection visible after repaint
   }
 
   // ========= Selection & input =========
@@ -494,13 +551,13 @@
   function setSelected(r, c) {
     if (gameOver) return;
 
-    // 1) Remove any old preview from previous tile
+    // Clear any old preview from previous tile
     clearPreview();
 
-    // 2) Move selection
+    // Move selection
     selected = { r, c };
 
-    // 3) Reset in-progress inputs for the new tile
+    // Reset in-progress inputs for the new tile
     pickedDigit = null;
     noteBuffer = "";
 
@@ -508,7 +565,7 @@
     updateHintText();
     updateRemoveButtons();
 
-    // 4) Prepare preview (empty now but this keeps logic consistent)
+    // Set (empty) preview now; will render when user picks something
     setPreviewForSelected();
   }
   function clearSelected() { selected = null; clearPreview(); highlightSelected(); updateRemoveButtons(); }
@@ -526,9 +583,9 @@
     removeMarkBtn.disabled = !(noteText[r] && noteText[r][c]);
   }
   function updateHintText() {
-    if (flagMode) asideHint.textContent = "Flag mode: pick (optional) a digit for the flag; preview shows softly; Confirm to commit.";
-    else if (noteMode) asideHint.textContent = `Note mode: tap digits and '/' to compose (e.g. 2/3); preview shows; Confirm to place.`;
-    else asideHint.textContent = "Number mode: pick a digit; preview shows on tile; Confirm to place. Wrong guesses have no penalty.";
+    if (flagMode) asideHint.textContent = "Flag mode: optionally add a digit to the flag; Confirm to commit.";
+    else if (noteMode) asideHint.textContent = `Note mode: tap digits and '/' to compose (e.g. 2/3); Confirm to place.`;
+    else asideHint.textContent = "Number mode: pick a digit; Confirm to commit. Bombs lose instantly.";
   }
 
   // Build numpad (NOTE: add "/" when noteMode)
@@ -565,7 +622,6 @@
     flagBtn.classList.toggle("flagModeOn", flagMode);
     markBtn.classList.remove("markModeOn");
     setStatus(flagMode ? "Flag mode ON." : "Flag mode OFF.", "hint");
-    // Reset per-tile inputs on mode change for clarity
     pickedDigit = null; noteBuffer = ""; setPreviewForSelected();
     updateHintText(); buildNumpad();
   });
@@ -587,6 +643,7 @@
     flagsCount = Math.max(0, flagsCount - 1);
     renderCell(r, c); updateStats();
     setStatus("Flag removed.", "hint");
+    if (!gameOver && isWin()) endGame(true, "All safe digits correct and bombs flagged with correct digits!");
   });
   removeMarkBtn.addEventListener("click", () => {
     if (gameOver || !selected) return;
@@ -602,9 +659,9 @@
     if (!selected) { setStatus("Select a tile first.", "lose"); return; }
     const { r, c } = selected;
 
-    if (given[r][c] || revealed[r][c]) { setStatus("This tile is already confirmed.", "lose"); bumpCell(r, c); return; }
+    if (given[r][c]) { setStatus("This tile is a given.", "lose"); bumpCell(r, c); return; }
 
-    // Commit according to preview/mode
+    // NOTE MODE: commit note (e.g., "2/3")
     if (noteMode) {
       if (!noteBuffer) { setStatus("Compose a note with digits and '/'.", "lose"); bumpCell(r, c); return; }
       if (!noteText[r]) noteText[r] = [];
@@ -615,32 +672,30 @@
       return;
     }
 
+    // FLAG MODE: commit flag (with optional digit label)
     if (flagMode) {
       if (!flagged[r][c]) { flagged[r][c] = true; flagsCount++; }
       if (!flagNote[r]) flagNote[r] = [];
-      flagNote[r][c] = pickedDigit ?? null;
-      if (noteText[r]) noteText[r][c] = "";
+      flagNote[r][c] = pickedDigit ?? null; // can be null, but won't satisfy win until correct digit is set
+      if (noteText[r]) noteText[r][c] = ""; // clear note when flagging
       setStatus(flagNote[r][c] == null ? "Blank flag placed." : "Flag placed.", "hint");
       clearPreview(); renderCell(r, c); updateStats();
-      if (isWin()) endGame(true, "All safe tiles confirmed!");
+      if (isWin()) endGame(true, "All safe digits correct and bombs flagged with correct digits!");
       return;
     }
 
-    // Number mode
+    // NUMBER MODE: committing to a digit on this tile (trial & error allowed)
     if (bombs[r][c]) { endGame(false, "You touched a bomb."); return; }
+
     if (pickedDigit == null) { setStatus("Pick a number 1–9, then Confirm.", "lose"); bumpCell(r, c); return; }
 
-    if (pickedDigit === solution[r][c]) {
-      revealed[r][c] = true;
-      if (noteText[r]) noteText[r][c] = "";
-      setStatus("Correct!", "hint");
-      clearPreview(); renderCell(r, c);
-      if (isWin()) endGame(true, "All safe tiles confirmed!");
-    } else {
-      setStatus("Wrong number. Try another.", "lose");
-      // keep covered; preview cleared so player chooses again
-      pickedDigit = null; clearPreview(); renderCell(r, c);
-    }
+    // Commit the user's digit (even if it's wrong). Can overwrite later.
+    entry[r][c] = pickedDigit;
+    revealed[r][c] = true;
+    if (noteText[r]) noteText[r][c] = ""; // clear notes on commit
+    setStatus("Digit placed.", "hint");
+    clearPreview(); renderCell(r, c);
+    if (isWin()) endGame(true, "All safe digits correct and bombs flagged with correct digits!");
   });
 
   function onMouseDownCell(e) {
@@ -692,7 +747,7 @@
       }
       for (let r = 0; r < SIDE; r++) for (let n = 1; n <= 9; n++) { const spots = []; for (let c = 0; c < SIDE; c++) if (!bombs[r][c] && !knownRevealed[r][c] && cand[r][c].has(n)) spots.push([r, c]); if (spots.length === 1) { reveal(spots[0][0], spots[0][1]); changed = true; } }
       for (let c = 0; c < SIDE; c++) for (let n = 1; n <= 9; n++) { const spots = []; for (let r = 0; r < SIDE; r++) if (!bombs[r][c] && !knownRevealed[r][c] && cand[r][c].has(n)) spots.push([r, c]); if (spots.length === 1) { reveal(spots[0][0], spots[0][1]); changed = true; } }
-      for (let br = 0; br < 3; br++) for (let bc = 0; bc < 3; bc++) for (let n = 1; n <= 9; n++) { const spots = []; for (let r = br * 3; r < br * 3 + 3; r++) for (let c = bc * 3; c < bc * 3 + 3; c++) if (!bombs[r][c] && !knownRevealed[r][c] && cand[r][c].has(n)) spots.push([r, c]); if (spots.length === 1) { reveal(spots[0][0], spots[0][1]); changed = true; } }
+      for (let br = 0; br < 3; br++) for (let bc = 0; bc < 3; bc++) for (let n = 1; n <= 9; n++) { const spots = []; for (let r = br * 3; r < br * 3 + 3; r++) for (let c = bc * 3; c < bc * 3; c++) if (!bombs[r][c] && !knownRevealed[r][c] && cand[r][c].has(n)) spots.push([r, c]); if (spots.length === 1) { reveal(spots[0][0], spots[0][1]); changed = true; } }
       return changed;
     }
 
@@ -831,14 +886,21 @@ maxResidualUnknownCells: ${cfg.maxResidualUnknownCells}`;
 
       selectRowColHints(cfg);
 
+      // reset arrays
       revealed = Array.from({ length: SIDE }, () => Array(SIDE).fill(false));
+      entry = Array.from({ length: SIDE }, () => Array(SIDE).fill(0));
       flagged = Array.from({ length: SIDE }, () => Array(SIDE).fill(false));
       flagNote = Array.from({ length: SIDE }, () => Array(SIDE).fill(null));
       noteText = Array.from({ length: SIDE }, () => Array(SIDE).fill(""));
 
       const res = chooseGivensPatterned(cfg);
       given = res.g;
-      for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) if (given[r][c]) revealed[r][c] = true;
+
+      // reveal givens & set entry to solution for them
+      for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) if (given[r][c]) {
+        revealed[r][c] = true;
+        entry[r][c] = solution[r][c];
+      }
 
       const evalRes = evaluateLogicalSolvability(cfg);
       if (evalRes.solvable) { passedLogic = true; break; }
