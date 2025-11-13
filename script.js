@@ -3,9 +3,9 @@
   const SIDE = 9, BASE = 3;
 
   const PRESETS = {
-    story:  { lives: 5, bombRatio: 0.14, targetStartClues: 19, targetStartGivens: 40, maxAdjStart: 2, spreadRows: true, spreadBlocks: true, hintRows: 4, hintCols: 4 },
+    story: { lives: 5, bombRatio: 0.16, targetStartClues: 19, targetStartGivens: 40, maxAdjStart: 2, spreadRows: true, spreadBlocks: true, hintRows: 4, hintCols: 4 },
     normal: { lives: 4, bombRatio: 0.18, targetStartClues: 15, targetStartGivens: 32, maxAdjStart: 3, spreadRows: true, spreadBlocks: true, hintRows: 3, hintCols: 3 },
-    hard:   { lives: 3, bombRatio: 0.22, targetStartClues: 9,  targetStartGivens: 20, maxAdjStart: 4, spreadRows: true, spreadBlocks: true, hintRows: 2, hintCols: 2 },
+    hard: { lives: 3, bombRatio: 0.22, targetStartClues: 9, targetStartGivens: 20, maxAdjStart: 4, spreadRows: true, spreadBlocks: true, hintRows: 2, hintCols: 2 },
     custom: { lives: 3, bombRatio: 0.14, targetStartClues: 17, targetStartGivens: 36, maxAdjStart: 2, spreadRows: true, spreadBlocks: true, hintRows: 3, hintCols: 3 },
   };
 
@@ -86,7 +86,7 @@
     }
     return res;
   };
-  const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]]; } return a; };
 
   // ========= Sudoku generator =========
   function generateSudokuSolved() {
@@ -151,40 +151,141 @@
     }
   }
 
-  // ========= Picking initial givens =========
+  // ========= Picking initial givens (clues + some normals) — stratified blue-noise with quotas =========
   function chooseGivensPatterned(cfg) {
-    const cells = [];
+    const totalTarget = Math.min(cfg.targetStartGivens || 27, SIDE * SIDE - 1);
+    const clueTarget = Math.min(cfg.targetStartClues || 15, totalTarget);
+
+    // Build candidate pools
+    const clueCells = [];
+    const safeCells = [];
     for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) {
       if (bombs[r][c]) continue;
       const isClue = solution[r][c] === adj[r][c];
-      const lowAdj = isClue && adj[r][c] <= (cfg.maxAdjStart ?? 2);
-      const score =
-        (isClue ? 1000 : 0) +
-        (lowAdj ? 100 : 0) +
-        (cfg.spreadRows ? (8 - Math.abs(4 - r)) : 0) +
-        (cfg.spreadBlocks ? (8 - Math.abs(4 - ((Math.floor(r/3)*3)+(Math.floor(c/3))))) : 0);
-      cells.push({ r, c, isClue, score });
+      (isClue ? clueCells : safeCells).push({ r, c, isClue });
     }
-    cells.sort((a, b) => b.score - a.score);
 
+    // Pre-shuffle to avoid deterministic tie bias (e.g., row 0 winning ties)
+    shuffle(clueCells);
+    shuffle(safeCells);
+
+    const blockId = (r, c) => Math.floor(r / 3) * 3 + Math.floor(c / 3);
+
+    // Hard caps (start strict, relax if needed)
+    const rowCapBase = Math.floor(totalTarget / SIDE);           // even share
+    const colCapBase = rowCapBase;
+    const blockCapBase = Math.ceil(totalTarget / 9);               // per 3x3 block
+
+    let rowCap = rowCapBase + 1; // allow slight slack from start
+    let colCap = colCapBase + 1;
+    let blockCap = Math.max(2, blockCapBase); // avoid too strict blocks
+
+    const perRow = Array(SIDE).fill(0);
+    const perCol = Array(SIDE).fill(0);
+    const perBlk = Array(9).fill(0);
+
+    // Distance helper
+    const dist = (a, b) => {
+      const dr = a.r - b.r, dc = a.c - b.c;
+      return Math.hypot(dr, dc);
+    };
+
+    const picked = [];
+
+    // ---- Quadrant seeding: prefer clues in each quadrant, else safe ----
+    const quads = [
+      { r0: 0, c0: 0 }, { r0: 0, c0: 3 }, { r0: 0, c0: 6 },
+      { r0: 3, c0: 0 }, { r0: 3, c0: 3 }, { r0: 3, c0: 6 },
+      { r0: 6, c0: 0 }, { r0: 6, c0: 3 }, { r0: 6, c0: 6 }
+    ];
+    // We’ll take up to 4 diverse seeds (one per far-apart blocks)
+    const seedBlocks = shuffle([0, 2, 6, 8]); // corners by block index
+    for (const b of seedBlocks) {
+      const r0 = Math.floor(b / 3) * 3, c0 = (b % 3) * 3;
+      const inBlock = (arr) => arr.filter(p => Math.floor(p.r / 3) === Math.floor(r0 / 3) && Math.floor(p.c / 3) === Math.floor(c0 / 3));
+      let cand = inBlock(clueCells);
+      if (cand.length === 0) cand = inBlock(safeCells);
+      if (cand.length) {
+        const p = cand[0];
+        picked.push(p);
+        perRow[p.r]++; perCol[p.c]++; perBlk[blockId(p.r, p.c)]++;
+        // remove from candidate pools
+        const rm = (arr, q) => { const i = arr.findIndex(x => x.r === q.r && x.c === q.c); if (i >= 0) arr.splice(i, 1); };
+        rm(clueCells, p); rm(safeCells, p);
+        if (picked.length >= Math.min(4, totalTarget)) break;
+      }
+    }
+
+    // ---- Scored selection with quotas & blue-noise spread ----
+    function takeFromPool(pool, need, allowRelax = true) {
+      let taken = 0;
+      const W_DIST = 10;               // distance importance
+      const W_ISCLUE = 2.0;            // prefer clues slightly (pool will be clue first)
+      const W_LOWADJ = 0.8;            // gentle nudge for “easy” clues
+      const ROW_BIAS = 0.6;            // penalize overused row/col
+      const COL_BIAS = 0.6;
+      const BLK_BIAS = 0.8;
+
+      while (taken < need && pool.length) {
+        let bestIdx = -1, bestScore = -1;
+
+        for (let i = 0; i < pool.length; i++) {
+          const cand = pool[i];
+          const r = cand.r, c = cand.c, b = blockId(r, c);
+
+          // hard caps
+          if (perRow[r] >= rowCap) continue;
+          if (perCol[c] >= colCap) continue;
+          if (perBlk[b] >= blockCap) continue;
+
+          const dmin = picked.length ? Math.min(...picked.map(p => dist(p, cand))) : 99;
+          const lowAdj = !bombs[r][c] && (solution[r][c] === adj[r][c]) && adj[r][c] <= 2;
+          const eps = Math.random() * 0.05; // break ties randomly
+
+          const score =
+            W_DIST * dmin +
+            (cand.isClue ? W_ISCLUE : 0) +
+            (lowAdj ? W_LOWADJ : 0) -
+            ROW_BIAS * perRow[r] -
+            COL_BIAS * perCol[c] -
+            BLK_BIAS * perBlk[b] +
+            eps;
+
+          if (score > bestScore) { bestScore = score; bestIdx = i; }
+        }
+
+        if (bestIdx === -1) {
+          // Couldn’t place due to caps; relax gradually and retry
+          if (!allowRelax) break;
+          rowCap++; colCap++;
+          if (blockCap < 6) blockCap++; // limited relaxation for blocks
+          continue;
+        }
+
+        const pick = pool.splice(bestIdx, 1)[0];
+        picked.push(pick);
+        perRow[pick.r]++; perCol[pick.c]++; perBlk[blockId(pick.r, pick.c)]++;
+        taken++;
+      }
+      return taken;
+    }
+
+    // 1) Take spread-out clues up to clueTarget (but not exceeding totalTarget)
+    const needClues = Math.min(clueTarget, totalTarget) - picked.length;
+    if (needClues > 0) takeFromPool(clueCells, needClues);
+
+    // 2) Fill remaining with safe cells, spread too
+    const remaining = Math.max(0, totalTarget - picked.length);
+    if (remaining > 0) takeFromPool(safeCells, remaining);
+
+    // Build givens matrix
     const g = Array.from({ length: SIDE }, () => Array(SIDE).fill(false));
-    let clues = 0, total = 0;
+    for (const p of picked) g[p.r][p.c] = true;
+    const clues = picked.filter(p => p.isClue).length;
 
-    for (const it of cells) {
-      if (total >= PRESETS[mode].targetStartGivens) break;
-      if (it.isClue && clues < PRESETS[mode].targetStartClues) {
-        g[it.r][it.c] = true;
-        clues++; total++;
-      }
-    }
-    for (const it of cells) {
-      if (total >= PRESETS[mode].targetStartGivens) break;
-      if (!g[it.r][it.c]) {
-        g[it.r][it.c] = true; total++;
-      }
-    }
     return { g, clues };
   }
+
 
   function passesSimpleLogicTest(g) {
     for (let i = 0; i < SIDE; i++) {
@@ -547,27 +648,51 @@
     if (!el) return; el.classList.add("bad"); setTimeout(() => el.classList.remove("bad"), 200);
   }
 
-  // ========= Row/Col hint selection =========
+  // ========= Row/Col hints (gutters) — prioritize lines with bombs lacking adjacent clues =========
   function selectRowColHints(cfg) {
+    // Precompute totals
     rowTotals = Array.from({ length: SIDE }, (_, r) => bombs[r].reduce((s, x) => s + (x ? 1 : 0), 0));
     colTotals = Array.from({ length: SIDE }, (_, c) => { let s = 0; for (let r = 0; r < SIDE; r++) if (bombs[r][c]) s++; return s; });
 
-    const lowAdj = (r, c) => !bombs[r][c] && solution[r][c] === adj[r][c] && adj[r][c] <= 2;
+    // Identify "hard bombs": bombs with NO adjacent clue cells
+    const isClue = (r, c) => !bombs[r][c] && (solution[r][c] === adj[r][c]);
+    const hasAdjacentClue = (r, c) => neighbors8(r, c).some(([rr, cc]) => isClue(rr, cc));
+
+    const hardBombRowCount = Array(SIDE).fill(0);
+    const hardBombColCount = Array(SIDE).fill(0);
+
+    for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) {
+      if (!bombs[r][c]) continue;
+      if (!hasAdjacentClue(r, c)) {
+        hardBombRowCount[r]++; hardBombColCount[c]++;
+      }
+    }
+
+    // Also reward lines that have many low-adjacent clues (good anchors)
+    const lowAdjClueRow = Array(SIDE).fill(0);
+    const lowAdjClueCol = Array(SIDE).fill(0);
+    for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) {
+      if (isClue(r, c) && adj[r][c] <= 2) { lowAdjClueRow[r]++; lowAdjClueCol[c]++; }
+    }
+
+    const infoWeight = 10;          // base reward for non-trivial totals
+    const hardWeight = 6;           // prioritize lines with “hard bombs”
+    const lowAdjWeight = 1.5;       // helpful but secondary
+    const trivialPenalty = -6;      // penalize lines with 0 or 9 bombs
 
     const rowScore = (r) => {
-      const info = rowTotals[r] === 0 || rowTotals[r] === 9 ? 0 : 1;
-      let la = 0; for (let c = 0; c < SIDE; c++) if (lowAdj(r, c)) la++;
-      return info * 10 + la;
+      const trivial = (rowTotals[r] === 0 || rowTotals[r] === SIDE) ? trivialPenalty : infoWeight;
+      return trivial + hardWeight * hardBombRowCount[r] + lowAdjWeight * lowAdjClueRow[r];
     };
     const colScore = (c) => {
-      const info = colTotals[c] === 0 || colTotals[c] === 9 ? 0 : 1;
-      let la = 0; for (let r = 0; r < SIDE; r++) if (lowAdj(r, c)) la++;
-      return info * 10 + la;
+      const trivial = (colTotals[c] === 0 || colTotals[c] === SIDE) ? trivialPenalty : infoWeight;
+      return trivial + hardWeight * hardBombColCount[c] + lowAdjWeight * lowAdjClueCol[c];
     };
 
     const rowIdx = Array.from({ length: SIDE }, (_, i) => i).sort((a, b) => rowScore(b) - rowScore(a));
     const colIdx = Array.from({ length: SIDE }, (_, i) => i).sort((a, b) => colScore(b) - colScore(a));
 
+    // Keep some spread so we don’t pick adjacent lines only
     function pickSpread(idxs, k) {
       const chosen = [];
       for (const i of idxs) { if (chosen.length >= k) break; if (chosen.some((x) => Math.abs(x - i) <= 1)) continue; chosen.push(i); }
@@ -580,9 +705,10 @@
     renderRowColHintsOverlay();
   }
 
+
   // ========= Mode/Config helpers =========
   function loadCustomFromLS() {
-    try { const raw = localStorage.getItem(LS_KEY); if (!raw) return; const cfg = JSON.parse(raw); PRESETS.custom = Object.assign({}, PRESETS.custom, cfg); } catch {}
+    try { const raw = localStorage.getItem(LS_KEY); if (!raw) return; const cfg = JSON.parse(raw); PRESETS.custom = Object.assign({}, PRESETS.custom, cfg); } catch { }
   }
   function saveCustomToLS() { localStorage.setItem(LS_KEY, JSON.stringify(PRESETS.custom)); }
   function getActiveConfig() { return Object.assign({}, PRESETS[mode]); }
@@ -625,7 +751,7 @@ spreadByBlocks: ${cfg.spreadBlocks}`;
   function updateConfigInputsUI() { const cfg = getActiveConfig(); syncInputsFromConfig(cfg); applyConfigInputsEnabled(); renderActiveConfigKV(); }
 
   modeEl.addEventListener("change", () => { mode = modeEl.value; updateConfigInputsUI(); });
-  [[cfgLives, valLives, (v) => v],[cfgBombRatio, valBombRatio, (v) => (+v).toFixed(2)],[cfgStartClues, valStartClues, (v) => v],[cfgStartGivens, valStartGivens, (v) => v],[cfgMaxAdj, valMaxAdj, (v) => v]].forEach(([input, label, fmt]) => {
+  [[cfgLives, valLives, (v) => v], [cfgBombRatio, valBombRatio, (v) => (+v).toFixed(2)], [cfgStartClues, valStartClues, (v) => v], [cfgStartGivens, valStartGivens, (v) => v], [cfgMaxAdj, valMaxAdj, (v) => v]].forEach(([input, label, fmt]) => {
     input.addEventListener("input", () => { label.textContent = fmt(input.value); if (mode === "custom") { syncConfigFromInputs(); } });
   });
   cfgSpreadRows.addEventListener("change", () => { if (mode === "custom") { syncConfigFromInputs(); } });
@@ -657,7 +783,7 @@ spreadByBlocks: ${cfg.spreadBlocks}`;
       selectRowColHints(cfg);
 
       revealed = Array.from({ length: SIDE }, () => Array(SIDE).fill(false));
-      flagged  = Array.from({ length: SIDE }, () => Array(SIDE).fill(false));
+      flagged = Array.from({ length: SIDE }, () => Array(SIDE).fill(false));
       flagNote = Array.from({ length: SIDE }, () => Array(SIDE).fill(null));
       markNote = Array.from({ length: SIDE }, () => Array(SIDE).fill(null));
       for (let r = 0; r < SIDE; r++) for (let c = 0; c < SIDE; c++) if (given[r][c]) revealed[r][c] = true;
