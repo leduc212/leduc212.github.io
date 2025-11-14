@@ -849,9 +849,13 @@
     if ((c + 1) % 3 === 0 && c !== SIDE - 1) div.classList.add("bRight");
     if ((r + 1) % 3 === 0 && r !== SIDE - 1) div.classList.add("bBottom");
 
-    const isRev = revealed[r][c],
-      isFlag = flagged[r][c],
-      type = tileType(r, c);
+    const isRev = revealed[r][c];
+    const isFlag = flagged[r][c];
+    const type = tileType(r, c);
+
+    const isSelected =
+      selected && selected.r === r && selected.c === c;
+    const hasPreview = !gameOver && isSelected && preview.kind;
 
     // Show all bombs on loss
     if (gameOver && !didWin && showAllBombs && bombs[r][c] && !isRev) {
@@ -890,8 +894,41 @@
       }
     }
 
+    // 🔥 GLOBAL OVERRIDE FOR FLAG / NOTE PREVIEW
+    // If we're previewing a flag or note on this cell, show ONLY that,
+    // even if it's currently revealed with a digit.
+    if (
+      hasPreview &&
+      (preview.kind === "flag" || preview.kind === "note")
+    ) {
+      div.classList.add("covered", "preview");
+
+      if (preview.kind === "flag") {
+        const pfIcon = document.createElement("div");
+        pfIcon.className = "preview__flagIcon";
+        pfIcon.textContent = "⚑";
+        div.appendChild(pfIcon);
+
+        if (preview.value != null) {
+          const pfNum = document.createElement("div");
+          pfNum.className = "preview__digit";
+          pfNum.textContent = preview.value;
+          div.appendChild(pfNum);
+        }
+      } else if (preview.kind === "note") {
+        const pn = document.createElement("div");
+        pn.className = "preview__note";
+        pn.textContent = String(preview.value);
+        div.appendChild(pn);
+      }
+
+      return; // 👈 don't draw the old digit/flag/note underneath
+    }
+
+    // ========= REVEALED CELLS =========
     if (isRev) {
       div.classList.add("revealed", type);
+
       if (type === "bomb") {
         const m = document.createElement("div");
         m.className = "bombmark";
@@ -906,11 +943,12 @@
           // Player-entered tiles (editable)
           const committed = entry[r][c] || "";
           div.classList.add("entered");
-          const isSelected = selected && selected.r === r && selected.c === c;
-          const showPreviewNumber =
-            isSelected && preview.kind === "number" && preview.value != null;
 
-          if (showPreviewNumber) {
+          const wantsNumberPreview =
+            hasPreview && preview.kind === "number" && preview.value != null;
+
+          if (wantsNumberPreview) {
+            // 👻 only ghost digit, hide committed one
             div.classList.add("preview");
             const pd = document.createElement("div");
             pd.className = "preview__digit";
@@ -938,10 +976,20 @@
       return;
     }
 
-    // Covered state
+    // ========= COVERED CELLS =========
     div.classList.add("covered");
 
-    // Committed decorations (flag/note)
+    // Number preview on covered tiles (flag/note already handled above)
+    if (hasPreview && preview.kind === "number") {
+      div.classList.add("preview");
+      const pd = document.createElement("div");
+      pd.className = "preview__digit";
+      pd.textContent = preview.value;
+      div.appendChild(pd);
+      return;
+    }
+
+    // No preview: show committed decorations (flag / note)
     if (isFlag) {
       div.classList.add("flag");
       const note = flagNote[r]?.[c];
@@ -961,40 +1009,8 @@
         div.appendChild(md);
       }
     }
-
-    // Live PREVIEW on selected tile
-    if (
-      selected &&
-      selected.r === r &&
-      selected.c === c &&
-      preview.kind &&
-      !gameOver
-    ) {
-      div.classList.add("preview");
-      if (preview.kind === "number") {
-        const pd = document.createElement("div");
-        pd.className = "preview__digit";
-        pd.textContent = preview.value;
-        div.appendChild(pd);
-      } else if (preview.kind === "note") {
-        const pn = document.createElement("div");
-        pn.className = "preview__note";
-        pn.textContent = String(preview.value);
-        div.appendChild(pn);
-      } else if (preview.kind === "flag") {
-        const pfIcon = document.createElement("div");
-        pfIcon.className = "preview__flagIcon";
-        pfIcon.textContent = "⚑";
-        div.appendChild(pfIcon);
-        if (preview.value != null) {
-          const pfNum = document.createElement("div");
-          pfNum.className = "preview__digit";
-          pfNum.textContent = preview.value;
-          div.appendChild(pfNum);
-        }
-      }
-    }
   }
+
 
   function renderBoard() {
     boardEl.innerHTML = "";
@@ -1203,24 +1219,48 @@
         bumpCell(r, c);
         return;
       }
+
+      // 🔄 Exclusivity: switching to note clears digit + flag
+      if (entry[r][c] != null && entry[r][c] !== "") {
+        entry[r][c] = null;
+        revealed[r][c] = false;            // treat notes as 'covered with note'
+      }
+      if (flagged[r][c]) {
+        flagged[r][c] = false;
+        flagsCount = Math.max(0, flagsCount - 1);
+        if (flagNote[r]) flagNote[r][c] = null;
+      }
+
       if (!noteText[r]) noteText[r] = [];
       noteText[r][c] = noteBuffer;
       noteBuffer = "";
       setStatus("Note placed.", "hint");
       clearPreview();
       renderCell(r, c);
+      updateStats();
       return;
     }
 
+
     // FLAG MODE: commit flag (with optional digit label)
     if (flagMode) {
+      // 🔄 Exclusivity: switching to flag clears digit + note
+      if (entry[r][c] != null && entry[r][c] !== "") {
+        entry[r][c] = null;
+        revealed[r][c] = false;   // flag lives on a covered tile
+      }
+      if (noteText[r]) {
+        noteText[r][c] = "";
+      }
+
       if (!flagged[r][c]) {
         flagged[r][c] = true;
         flagsCount++;
       }
+
       if (!flagNote[r]) flagNote[r] = [];
-      flagNote[r][c] = pickedDigit ?? null; // can be null, but won't satisfy win until correct digit is set
-      if (noteText[r]) noteText[r][c] = ""; // clear note when flagging
+      flagNote[r][c] = pickedDigit ?? null; // can be null; must match bomb digit to win
+
       setStatus(
         flagNote[r][c] == null ? "Blank flag placed." : "Flag placed.",
         "hint"
@@ -1228,13 +1268,10 @@
       clearPreview();
       renderCell(r, c);
       updateStats();
-      if (isWin())
-        endGame(
-          true,
-          "All safe digits correct and bombs flagged with correct digits!"
-        );
+      if (isWin()) endGame(true, "All safe digits correct and bombs flagged with correct digits!");
       return;
     }
+
 
     // NUMBER MODE: committing to a digit on this tile (trial & error allowed)
     if (bombs[r][c]) {
@@ -1251,15 +1288,21 @@
     // Commit the user's digit (even if it's wrong). Can overwrite later.
     entry[r][c] = pickedDigit;
     revealed[r][c] = true;
-    if (noteText[r]) noteText[r][c] = ""; // clear notes on commit
+
+    // 🔄 Exclusivity: clear notes + flag when placing a digit
+    if (noteText[r]) {
+      noteText[r][c] = "";
+    }
+    if (flagged[r][c]) {
+      flagged[r][c] = false;
+      flagsCount = Math.max(0, flagsCount - 1);
+      if (flagNote[r]) flagNote[r][c] = null;
+    }
+
     setStatus("Digit placed.", "hint");
     clearPreview();
     renderCell(r, c);
-    if (isWin())
-      endGame(
-        true,
-        "All safe digits correct and bombs flagged with correct digits!"
-      );
+    if (isWin()) endGame(true, "All safe digits correct and bombs flagged with correct digits!");
   });
 
   function onMouseDownCell(e) {
