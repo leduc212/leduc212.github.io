@@ -3,6 +3,36 @@
   const SIDE = 9,
     BASE = 3;
 
+  // ========= Seeded RNG =========
+  let currentSeed = null;
+  let rngState = 1;
+
+  function seedFromString(str) {
+    // simple string -> 32-bit hash
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    h >>>= 0;
+    return h || 1;
+  }
+
+  function setSeed(seedValue) {
+    currentSeed = String(seedValue);
+    rngState = seedFromString(currentSeed);
+  }
+
+  function rand() {
+    // xorshift32
+    let x = rngState;
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    rngState = x >>> 0;
+    return rngState / 4294967296;
+  }
+
   // Per-mode logic controls
   const PRESETS = {
     story: {
@@ -143,6 +173,8 @@
   const resetCustomBtn = document.getElementById("resetCustom");
   const configPanel = document.getElementById("configPanel");
   const reviewBtn = document.getElementById("reviewBtn");
+  const seedDisplay = document.getElementById("seedDisplay");
+  const seedInput = document.getElementById("seedInput");
 
   const cfgLives = document.getElementById("cfgLives");
   const cfgBombRatio = document.getElementById("cfgBombRatio");
@@ -204,7 +236,7 @@
   };
   const shuffle = (a) => {
     for (let i = a.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = Math.floor(rand() * (i + 1));
       [a[i], a[j]] = [a[j], a[i]];
     }
     return a;
@@ -261,8 +293,8 @@
     return bombs[r][c]
       ? "bomb"
       : solution[r][c] === adj[r][c]
-      ? "clue"
-      : "normal";
+        ? "clue"
+        : "normal";
   }
 
   function ensureBombHasTwoSupports(maxPasses = 1) {
@@ -430,7 +462,7 @@
             0.6 * perRow[r] -
             0.6 * perCol[c] -
             0.8 * perBlk[b] +
-            Math.random() * 0.05;
+            rand() * 0.05;
           if (score > bestScore) {
             bestScore = score;
             bestIdx = i;
@@ -542,7 +574,7 @@
           const score =
             (nearPicked ? 2 : 0) +
             (cand.adj <= 2 ? 1 : 0) +
-            Math.random() * 0.1;
+            rand() * 0.1;
           if (score > bestScore && canAdd(cand)) {
             bestScore = score;
             seedIdx = i;
@@ -560,10 +592,10 @@
         // grow cluster around seed
         let tgtSize = Math.min(
           (cfg.clusterSizeMin || 3) +
-            Math.floor(
-              Math.random() *
-                ((cfg.clusterSizeMax || 5) - (cfg.clusterSizeMin || 3) + 1)
-            ),
+          Math.floor(
+            rand() *
+            ((cfg.clusterSizeMax || 5) - (cfg.clusterSizeMin || 3) + 1)
+          ),
           (cfg.targetStartGivens || 27) - picked.length
         );
         const nbrs = cheby1(seed.r, seed.c)
@@ -833,16 +865,25 @@
     if (reviewMode && gameOver) {
       if (!isRev) {
         if (bombs[r][c]) {
+          div.classList.add("postHiddenBomb");
+
           const m = document.createElement("div");
           m.className = "bombmark";
           m.textContent = "💣";
           div.appendChild(m);
+
+          // ✅ Show the bomb's Sudoku digit too
+          const d = document.createElement("div");
+          d.className = "bombDigitOverlay";
+          d.textContent = solution[r][c];
+          div.appendChild(d);
         } else {
           const isClue = solution[r][c] === adj[r][c];
           div.classList.add(isClue ? "postHiddenClue" : "postHiddenSafe");
           div.textContent = solution[r][c];
         }
       }
+
       if (isFlag) {
         if (bombs[r][c]) div.classList.add("flagRight");
         else div.classList.add("flagWrong");
@@ -870,15 +911,27 @@
             isSelected && preview.kind === "number" && preview.value != null;
 
           if (showPreviewNumber) {
-            // ghost the incoming number (low opacity + flicker)
             div.classList.add("preview");
             const pd = document.createElement("div");
             pd.className = "preview__digit";
             pd.textContent = preview.value;
             div.appendChild(pd);
           } else {
-            // show the committed digit normally
             div.textContent = committed;
+          }
+
+          // In review mode, also show the correct digit
+          if (reviewMode && gameOver) {
+            const correct = solution[r][c];
+            const overlay = document.createElement("div");
+            overlay.className = "correctDigitOverlay";
+            if (String(correct) !== committed) overlay.classList.add("wrong");
+            overlay.textContent = correct;
+            div.appendChild(overlay);
+
+            if (String(correct) !== committed && committed !== "") {
+              div.classList.add("enteredWrong");
+            }
           }
         }
       }
@@ -1602,7 +1655,7 @@
       if (!raw) return;
       const cfg = JSON.parse(raw);
       PRESETS.custom = Object.assign({}, PRESETS.custom, cfg);
-    } catch {}
+    } catch { }
   }
   function saveCustomToLS() {
     localStorage.setItem(LS_KEY, JSON.stringify(PRESETS.custom));
@@ -1766,6 +1819,16 @@ bootstrapSteps: ${cfg.bootstrapSteps}`;
     markBtn.classList.remove("markModeOn");
 
     const cfg = getActiveConfig();
+
+    // Handle board seed
+    let seed;
+    if (seedInput && seedInput.value.trim() !== "") {
+      seed = seedInput.value.trim();
+    } else {
+      seed = Math.floor(Math.random() * 1e9).toString();
+    }
+    setSeed(seed);
+    if (seedDisplay) seedDisplay.textContent = seed;
 
     const MAX_BOARD_TRIES = 250;
     let foundEnoughClues = false,
