@@ -38,7 +38,7 @@
     story: {
       lives: 0,
       bombRatio: 0.16,
-      minStartClues: 12,
+      minStartClues: 14,
       targetStartGivens: 40,
       maxAdjStart: 2,
       spreadRows: true,
@@ -58,7 +58,7 @@
     normal: {
       lives: 0,
       bombRatio: 0.18,
-      minStartClues: 10,
+      minStartClues: 12,
       targetStartGivens: 36,
       maxAdjStart: 3,
       spreadRows: true,
@@ -73,7 +73,7 @@
       clusterSizeMax: 5,
       supportPasses: 2,
       bootstrapSteps: 1,
-      clueGivenRatio: 2 / 3,
+      clueGivenRatio: 0.5,
     },
     hard: {
       lives: 0,
@@ -93,7 +93,7 @@
       clusterSizeMax: 4,
       supportPasses: 2,
       bootstrapSteps: 1,
-      clueGivenRatio: 2 / 3,
+      clueGivenRatio: 0.5,
     },
     custom: {
       lives: 0,
@@ -387,6 +387,7 @@
         });
       }
 
+    // --- ORIGINAL CLUE SELECTION ---
     const preferredClues = clueCellsAll.filter(
       (p) => p.adj <= (cfg.maxAdjStart ?? 2)
     );
@@ -394,18 +395,27 @@
       .filter((p) => p.adj > (cfg.maxAdjStart ?? 2))
       .sort((a, b) => a.adj - b.adj);
 
-    // 🔥 NEW: cluePool = all clue cells, low-adj first
-    const cluePool = [...preferredClues, ...relaxedClues];
+    // --- NEW: apply clueGivenRatio ---
+    const totalClues = clueCellsAll.length;
+    const maxClueGivens = Math.max(
+      minClues,
+      Math.floor(totalClues * (cfg.clueGivenRatio ?? 1))
+    );
 
-    // Shuffle pools
+    // Build cluePool with ratio
+    const cluePool = [];
+    for (const p of preferredClues) {
+      if (cluePool.length >= maxClueGivens) break;
+      cluePool.push(p);
+    }
+    for (const p of relaxedClues) {
+      if (cluePool.length >= maxClueGivens) break;
+      cluePool.push(p);
+    }
+
     shuffle(cluePool);
     shuffle(safeCells);
-    const totalClues = clueCellsAll.length;
-    const clueRatio = cfg.clueGivenRatio ?? 2 / 3;
-    const maxClueGivens = Math.min(
-      totalClues,
-      Math.max(minClues, Math.round(totalClues * clueRatio))
-    );
+
     const blockId = (r, c) => Math.floor(r / 3) * 3 + Math.floor(c / 3);
     const dist = (a, b) => Math.hypot(a.r - b.r, a.c - b.c);
 
@@ -420,15 +430,11 @@
       perCol = Array(SIDE).fill(0),
       perBlk = Array(9).fill(0);
     const picked = [];
-    let clueGivenCount = 0;
+
     // seed across distant blocks
     for (const b of shuffle([0, 2, 6, 8])) {
       const inBlk = (arr) => arr.filter((p) => blockId(p.r, p.c) === b);
-
-      // Prefer clues in this block if we haven't hit the cap yet
-      let cand = inBlk(
-        cluePool.filter((p) => !(p.isClue && clueGivenCount >= maxClueGivens))
-      );
+      let cand = inBlk(cluePool);
       if (!cand.length) cand = inBlk(safeCells);
       if (cand.length) {
         const p = cand[0];
@@ -436,8 +442,6 @@
         perRow[p.r]++;
         perCol[p.c]++;
         perBlk[blockId(p.r, p.c)]++;
-        if (p.isClue) clueGivenCount++;
-
         const rm = (arr, q) => {
           const i = arr.findIndex((x) => x.r === q.r && x.c === q.c);
           if (i >= 0) arr.splice(i, 1);
@@ -461,7 +465,6 @@
       const ROW_BIAS = 0.6,
         COL_BIAS = 0.6,
         BLK_BIAS = 0.8;
-
       while (taken < need && pool.length) {
         let bestIdx = -1,
           bestScore = -1;
@@ -470,17 +473,12 @@
             r = cand.r,
             c = cand.c,
             b = blockId(r, c);
-
-          // 🔥 NEW: stop picking clue tiles once we hit the global cap
-          if (cand.isClue && clueGivenCount >= maxClueGivens) continue;
-
           if (
             perRow[r] >= rowCap ||
             perCol[c] >= colCap ||
             perBlk[b] >= blockCap
           )
             continue;
-
           const dmin = picked.length
             ? Math.min(...picked.map((p) => dist(p, cand)))
             : 99;
@@ -489,11 +487,10 @@
             10 * dmin +
             (cand.isClue ? (preferClues ? 2 : 0) : 0) +
             (lowAdj ? 0.8 : 0) -
-            ROW_BIAS * perRow[r] -
-            COL_BIAS * perCol[c] -
-            BLK_BIAS * perBlk[b] +
+            0.6 * perRow[r] -
+            0.6 * perCol[c] -
+            0.8 * perBlk[b] +
             rand() * 0.05;
-
           if (score > bestScore) {
             bestScore = score;
             bestIdx = i;
@@ -511,7 +508,6 @@
         perRow[p.r]++;
         perCol[p.c]++;
         perBlk[blockId(p.r, p.c)]++;
-        if (p.isClue) clueGivenCount++; // 🔥 track clue givens
         taken++;
       }
       return taken;
@@ -653,6 +649,35 @@
     // finalize the givens grid
     const g = Array.from({ length: SIDE }, () => Array(SIDE).fill(false));
     for (const p of picked) g[p.r][p.c] = true;
+
+    // --- NEW: enforce clueGivenRatio on final givens ---
+    // --- FINAL: enforce clueGivenRatio on final givens ---
+    if (cfg.clueGivenRatio != null && cfg.clueGivenRatio < 1) {
+      // total clue cells on the board, regardless of given/hidden
+      const totalClues = clueCellsAll.length;
+
+      // target number of *given* clue cells
+      let maxClueGivens = Math.floor(totalClues * cfg.clueGivenRatio);
+      maxClueGivens = Math.max(0, Math.min(maxClueGivens, totalClues));
+
+      // collect all clue cells that are currently givens
+      const givenClues = [];
+      for (let r = 0; r < SIDE; r++) {
+        for (let c = 0; c < SIDE; c++) {
+          if (!bombs[r][c] && solution[r][c] === adj[r][c] && g[r][c]) {
+            givenClues.push({ r, c });
+          }
+        }
+      }
+
+      // randomly turn off clue-givens until we hit the cap
+      while (givenClues.length > maxClueGivens) {
+        const idx = Math.floor(rand() * givenClues.length);
+        const { r, c } = givenClues.splice(idx, 1)[0];
+        g[r][c] = false; // still a clue cell internally, just not shown at start
+      }
+    }
+
     return { g };
   }
 
