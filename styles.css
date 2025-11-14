@@ -16,10 +16,63 @@
   --flagDigit: #ff6b6b;
   --bombHL: #ff7bd1;
   --district: #6f76a8;
-  /* 3×3 block borders */
   --mark: #ffd24d;
-  /* mark mode yellow */
   --markDigit: #ffe48b;
+
+  --bgGradient: linear-gradient(180deg, #0b0c12, #11131a);
+
+  --boardBg: #0008;
+  --statusBg: #0b1222cc;
+  --gutBg: #0b1222cc;
+  --cfgItemBg: #141822;
+  --kvBg: #0d1220;
+
+  --enteredBg1: #3a4b62;
+  --enteredBg2: #465162;
+  --enteredWrongBg1: #4b3238;
+  --enteredWrongBg2: #35252a;
+  --givenBg1: #2b3044;
+  --givenBg2: #23283b;
+  --bombRevealedBg1: #311a22;
+  --bombRevealedBg2: #2a1a1f;
+}
+
+:root[data-theme="light"] {
+  --bg: #f5ede0;
+  --panel: #fff8ef;
+  --ink: #241a12;
+  --muted: #7a6a55;
+  --tile: #f3e3cd;
+  --tile2: #ecd6bd;
+  --tile3: #e2c8aa;
+  --accent: #d38c3a;
+  --ok: #1a7f4b;
+  --warn: #d97706;
+  --danger: #b91c1c;
+  --clue: #2563eb;
+  --flag: #e11d48;
+  --bomb: #b91c1c;
+  --flagDigit: #7f1d1d;
+  --bombHL: #f97316;
+  --district: #d1b38c;
+  --mark: #facc15;
+  --markDigit: #b45309;
+
+  --bgGradient: linear-gradient(180deg, #f9f1e3, #ebdecc);
+  --boardBg: rgba(0, 0, 0, 0.06);
+  --statusBg: rgba(255, 255, 255, 0.9);
+  --gutBg: rgba(255, 255, 255, 0.9);
+  --cfgItemBg: #f3e6d3;
+  --kvBg: #f2e7d7;
+
+  --enteredBg1: #f7e0b8;
+  --enteredBg2: #f0cf92;
+  --enteredWrongBg1: #f6b5a0;
+  --enteredWrongBg2: #f08c7a;
+  --givenBg1: #f4e3c6;
+  --givenBg2: #ebd3a9;
+  --bombRevealedBg1: #f8cbc5;
+  --bombRevealedBg2: #f3a39a;
 }
 
 * {
@@ -28,7 +81,7 @@
 
 body {
   margin: 0;
-  background: linear-gradient(180deg, #0b0c12, #11131a);
+  background: var(--bgGradient);
   color: var(--ink);
   font: 14px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial;
   display: flex;
@@ -57,7 +110,9 @@ body {
   width: 16px;
   aspect-ratio: 1;
   background: var(--danger);
-  clip-path: path("M12 21s-8-4.438-8-11a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 6.562-8 11-8 11Z");
+  clip-path: path(
+    "M12 21s-8-4.438-8-11a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 6.562-8 11-8 11Z"
+  );
   opacity: 0.18;
 }
 
@@ -91,6 +146,16 @@ button {
   box-shadow: inset 0 0 0 1px #ffffff0a, 0 1px 0 #000a;
 }
 
+.theme-toggle {
+  padding-inline: 10px;
+  border-radius: 999px;
+  font-size: 14px;
+}
+
+:root[data-theme="light"] .theme-toggle {
+  box-shadow: inset 0 0 0 1px #00000010, 0 1px 0 #00000011;
+}
+
 button:hover {
   filter: brightness(1.06);
 }
@@ -115,13 +180,13 @@ button[disabled] {
 /* Status / notice bar */
 .status {
   grid-column: 1 / -1;
-  background: #0b1222cc;
   border: 1px solid #0008;
   border-radius: 10px;
   padding: 10px 12px;
   color: var(--muted);
   font-weight: 800;
   box-shadow: 0 6px 24px #0008, inset 0 0 0 1px #ffffff12;
+  background: var(--statusBg);
 }
 
 .status.win {
@@ -156,14 +221,13 @@ button[disabled] {
   grid-template-columns: repeat(9, 1fr);
   grid-template-rows: repeat(9, 1fr);
   gap: 2px;
-  background: #0008;
+  background: var(--boardBg);
   padding: 2px;
   border-radius: 14px;
   border: 4px solid var(--district);
   box-shadow: 0 0 12px #6f76a830;
 }
 
-/* Cells */
 .cell {
   position: relative;
   display: flex;
@@ -175,7 +239,7 @@ button[disabled] {
   -webkit-tap-highlight-color: transparent;
   font-size: clamp(16px, 3vw, 26px);
   font-weight: 900;
-  color: #e9effa;
+  color: var(--ink);
   transition: 0.08s background, 0.08s transform, 0.08s color, 0.08s box-shadow;
   border-right: 0;
   border-bottom: 0;
@@ -210,7 +274,11 @@ button[disabled] {
 
 /* Bomb visuals */
 .cell.bomb.revealed {
-  background: linear-gradient(180deg, #311a22, #2a1a1f);
+  background: linear-gradient(
+    180deg,
+    var(--bombRevealedBg1),
+    var(--bombRevealedBg2)
+  );
   outline: 2px solid #ff4b6e80;
 }
 
@@ -222,7 +290,7 @@ button[disabled] {
 /* Given tiles */
 .cell.given {
   box-shadow: inset 0 0 0 2px #ffffff12;
-  background: linear-gradient(180deg, #2b3044, #23283b);
+  background: linear-gradient(180deg, var(--givenBg1), var(--givenBg2));
 }
 
 /* Subgrid (kept subtle) */
@@ -444,7 +512,7 @@ button[disabled] {
   left: 8px;
   transform: translateY(-50%);
   padding: 2px 6px;
-  background: #0b1222cc;
+  background: var(--gutBg);
   border: 1px solid #0008;
   border-radius: 8px;
   box-shadow: 0 2px 8px #0008, inset 0 0 0 1px #ffffff12;
@@ -456,7 +524,7 @@ button[disabled] {
   top: 8px;
   transform: translateX(-50%);
   padding: 2px 6px;
-  background: #0b1222cc;
+  background: var(--gutBg);
   border: 1px solid #0008;
   border-radius: 8px;
   box-shadow: 0 2px 8px #0008, inset 0 0 0 1px #ffffff12;
@@ -492,7 +560,7 @@ details.block {
   width: min(96vw, 980px);
 }
 
-details.block>summary {
+details.block > summary {
   cursor: pointer;
   outline: none;
   list-style: none;
@@ -508,7 +576,7 @@ details.block>summary {
 }
 
 .cfgitem {
-  background: #141822;
+  background: var(--cfgItemBg);
   border: 1px solid #0008;
   border-radius: 10px;
   padding: 10px;
@@ -538,7 +606,7 @@ details.block>summary {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
   color: #cfe;
-  background: #0d1220;
+  background: var(--kvBg);
   padding: 8px;
   border-radius: 8px;
   white-space: pre-wrap;
@@ -646,13 +714,13 @@ details.block>summary {
 
 /* Keep the cell fully opaque; only preview content is soft */
 .cell.preview {
-  animation: flicker .9s ease-in-out infinite alternate;
+  animation: flicker 0.9s ease-in-out infinite alternate;
 }
 
 .cell.preview .preview__digit,
 .cell.preview .preview__note,
 .cell.preview .preview__flagIcon {
-  opacity: .65;
+  opacity: 0.65;
   /* soft look */
   filter: brightness(1.05);
 }
@@ -677,16 +745,18 @@ details.block>summary {
   }
 }
 
-/* Player-entered (revealed) tiles — distinct from givens */
 .cell.entered {
-  background: linear-gradient(180deg, #3a4b62, #465162);
+  background: linear-gradient(180deg, var(--enteredBg1), var(--enteredBg2));
   box-shadow: inset 0 0 0 2px #ffffff1a, 0 0 0 1px #0006;
   cursor: pointer;
 }
 
-/* Optional: gentle warning when the entered digit is wrong */
 .cell.entered.wrong {
-  background: linear-gradient(180deg, #4b3238, #35252a);
+  background: linear-gradient(
+    180deg,
+    var(--enteredWrongBg1),
+    var(--enteredWrongBg2)
+  );
   box-shadow: inset 0 0 0 2px #ff6b6b66;
 }
 
@@ -698,7 +768,7 @@ details.block>summary {
 
 /* Slightly stronger ghost on editable tiles */
 .cell.entered.preview .preview__digit {
-  opacity: .75;
+  opacity: 0.75;
 }
 
 .seedRow {
@@ -762,4 +832,96 @@ details.block>summary {
   color: var(--danger);
   opacity: 0.85;
   pointer-events: none;
+}
+
+/* Light mode: make notes more obvious */
+:root[data-theme="light"] .cell.mark {
+  box-shadow: inset 0 0 0 2px rgba(234, 179, 8, 0.75); /* stronger yellow ring */
+}
+
+:root[data-theme="light"] .cell.mark::after {
+  color: #a16207; /* darker pen icon */
+}
+
+:root[data-theme="light"] .markDigit {
+  color: #b45309; /* strong amber */
+  text-shadow: 0 0 1px rgba(255, 255, 255, 0.7); /* pop on beige */
+}
+
+/* LIGHT MODE — givens = beige, user digits = pure white + strong ring */
+:root[data-theme="light"] .cell.given {
+  background: linear-gradient(180deg, #ead7b3, #d3b887); /* deeper beige */
+  color: #5b4630; /* printed ink */
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px rgba(90, 75, 42, 0.35),
+    0 0 2px rgba(0, 0, 0, 0.06);
+}
+
+/* LIGHT MODE — Player-entered tiles: fully white with warm brown frame */
+:root[data-theme="light"] .cell.entered {
+  background: #ffffff !important; /* full white */
+  color: #2c2c2c; /* strong dark ink */
+  font-weight: 900;
+  box-shadow: inset 0 0 0 2px rgba(120, 85, 40, 0.85),
+    /* warm brown border */ 0 0 4px rgba(120, 85, 40, 0.35); /* subtle brown glow */
+}
+
+/* When selected / hovered, make it pop even more */
+:root[data-theme="light"] .cell.entered.sel,
+:root[data-theme="light"] .cell.entered:hover {
+  box-shadow: inset 0 0 0 2px rgba(37, 99, 235, 1),
+    0 0 6px rgba(37, 99, 235, 0.55);
+}
+
+/* Light Mode — make clue tiles pop more clearly */
+:root[data-theme="light"] .cell.clue.revealed {
+  background: linear-gradient(180deg, #dce8fb, #c9dbf8); /* soft blue tile */
+  color: #1e40af; /* deep royal blue digit */
+  outline: 2px solid #3b82f6aa; /* vivid border */
+  box-shadow: inset 0 0 0 2px #93c5fd88, /* inner soft glow */ 0 0 8px #60a5fa55; /* outer glow */
+  font-weight: 900;
+}
+
+:root[data-theme="light"] .cell.normal.revealed {
+  background: linear-gradient(180deg, #f1e6d3, #e6d6bd);
+  outline: 1px solid #bfa98a;
+}
+/* LIGHT MODE — flagged tiles should have a strong red border */
+:root[data-theme="light"] .cell.flag {
+  box-shadow: inset 0 0 0 3px rgba(220, 38, 38, 0.9),
+    /* deep red border */ 0 0 6px rgba(220, 38, 38, 0.4); /* soft red glow */
+}
+
+/* ========== LIGHT MODE UX IMPROVEMENTS ========== */
+
+/* 1. Clearer bomb row/column hints */
+:root[data-theme="light"] .gutRow,
+:root[data-theme="light"] .gutCol {
+  background: #fff4d6;
+  color: #7a3b00;
+  border-color: rgba(120, 85, 40, 0.4);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08),
+    inset 0 0 0 2px rgba(240, 180, 70, 0.25);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+:root[data-theme="light"] .rowHints,
+:root[data-theme="light"] .colHints {
+  text-shadow: none;
+}
+
+/* 2. Better seed input styling */
+:root[data-theme="light"] .seedRow input {
+  background: #fff7e6;
+  border: 1px solid #c7a878;
+  color: #3a2a18;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* 3. Better active config panel readability */
+:root[data-theme="light"] .kv {
+  background: #fff3d9;
+  color: #5c3b17;
+  border-color: rgba(150, 110, 50, 0.4);
 }

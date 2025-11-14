@@ -175,6 +175,8 @@
   const reviewBtn = document.getElementById("reviewBtn");
   const seedDisplay = document.getElementById("seedDisplay");
   const seedInput = document.getElementById("seedInput");
+  const themeToggleBtn = document.getElementById("themeToggle");
+  const THEME_KEY = "runic-theme";
 
   const cfgLives = document.getElementById("cfgLives");
   const cfgBombRatio = document.getElementById("cfgBombRatio");
@@ -199,6 +201,18 @@
   colHL.className = "hlStripe";
   boardWrapEl.appendChild(rowHL);
   boardWrapEl.appendChild(colHL);
+
+  function applyTheme(theme) {
+    const root = document.documentElement;
+    const normalized = theme === "light" ? "light" : "dark";
+
+    root.setAttribute("data-theme", normalized);
+
+    if (themeToggleBtn) {
+      // Icon: show sun when currently dark, moon when currently light
+      themeToggleBtn.textContent = normalized === "light" ? "🌙" : "☀️";
+    }
+  }
 
   // ========= Review toggle =========
   reviewBtn.addEventListener("click", () => {
@@ -293,8 +307,8 @@
     return bombs[r][c]
       ? "bomb"
       : solution[r][c] === adj[r][c]
-        ? "clue"
-        : "normal";
+      ? "clue"
+      : "normal";
   }
 
   function ensureBombHasTwoSupports(maxPasses = 1) {
@@ -572,9 +586,7 @@
             (p) => Math.max(Math.abs(p.r - cand.r), Math.abs(p.c - cand.c)) <= 2
           );
           const score =
-            (nearPicked ? 2 : 0) +
-            (cand.adj <= 2 ? 1 : 0) +
-            rand() * 0.1;
+            (nearPicked ? 2 : 0) + (cand.adj <= 2 ? 1 : 0) + rand() * 0.1;
           if (score > bestScore && canAdd(cand)) {
             bestScore = score;
             seedIdx = i;
@@ -592,10 +604,10 @@
         // grow cluster around seed
         let tgtSize = Math.min(
           (cfg.clusterSizeMin || 3) +
-          Math.floor(
-            rand() *
-            ((cfg.clusterSizeMax || 5) - (cfg.clusterSizeMin || 3) + 1)
-          ),
+            Math.floor(
+              rand() *
+                ((cfg.clusterSizeMax || 5) - (cfg.clusterSizeMin || 3) + 1)
+            ),
           (cfg.targetStartGivens || 27) - picked.length
         );
         const nbrs = cheby1(seed.r, seed.c)
@@ -853,8 +865,7 @@
     const isFlag = flagged[r][c];
     const type = tileType(r, c);
 
-    const isSelected =
-      selected && selected.r === r && selected.c === c;
+    const isSelected = selected && selected.r === r && selected.c === c;
     const hasPreview = !gameOver && isSelected && preview.kind;
 
     // Show all bombs on loss
@@ -897,10 +908,7 @@
     // 🔥 GLOBAL OVERRIDE FOR FLAG / NOTE PREVIEW
     // If we're previewing a flag or note on this cell, show ONLY that,
     // even if it's currently revealed with a digit.
-    if (
-      hasPreview &&
-      (preview.kind === "flag" || preview.kind === "note")
-    ) {
+    if (hasPreview && (preview.kind === "flag" || preview.kind === "note")) {
       div.classList.add("covered", "preview");
 
       if (preview.kind === "flag") {
@@ -961,13 +969,14 @@
           // In review mode, also show the correct digit
           if (reviewMode && gameOver) {
             const correct = solution[r][c];
-            const overlay = document.createElement("div");
-            overlay.className = "correctDigitOverlay";
-            if (String(correct) !== committed) overlay.classList.add("wrong");
-            overlay.textContent = correct;
-            div.appendChild(overlay);
+            const committedStr = String(committed);
 
-            if (String(correct) !== committed && committed !== "") {
+            if (committedStr !== "" && committedStr !== String(correct)) {
+              // Only for wrong entries
+              const overlay = document.createElement("div");
+              overlay.className = "correctDigitOverlay wrong";
+              overlay.textContent = correct;
+              div.appendChild(overlay);
               div.classList.add("enteredWrong");
             }
           }
@@ -1010,7 +1019,6 @@
       }
     }
   }
-
 
   function renderBoard() {
     boardEl.innerHTML = "";
@@ -1223,7 +1231,7 @@
       // 🔄 Exclusivity: switching to note clears digit + flag
       if (entry[r][c] != null && entry[r][c] !== "") {
         entry[r][c] = null;
-        revealed[r][c] = false;            // treat notes as 'covered with note'
+        revealed[r][c] = false; // treat notes as 'covered with note'
       }
       if (flagged[r][c]) {
         flagged[r][c] = false;
@@ -1241,13 +1249,12 @@
       return;
     }
 
-
     // FLAG MODE: commit flag (with optional digit label)
     if (flagMode) {
       // 🔄 Exclusivity: switching to flag clears digit + note
       if (entry[r][c] != null && entry[r][c] !== "") {
         entry[r][c] = null;
-        revealed[r][c] = false;   // flag lives on a covered tile
+        revealed[r][c] = false; // flag lives on a covered tile
       }
       if (noteText[r]) {
         noteText[r][c] = "";
@@ -1268,10 +1275,13 @@
       clearPreview();
       renderCell(r, c);
       updateStats();
-      if (isWin()) endGame(true, "All safe digits correct and bombs flagged with correct digits!");
+      if (isWin())
+        endGame(
+          true,
+          "All safe digits correct and bombs flagged with correct digits!"
+        );
       return;
     }
-
 
     // NUMBER MODE: committing to a digit on this tile (trial & error allowed)
     if (bombs[r][c]) {
@@ -1302,7 +1312,11 @@
     setStatus("Digit placed.", "hint");
     clearPreview();
     renderCell(r, c);
-    if (isWin()) endGame(true, "All safe digits correct and bombs flagged with correct digits!");
+    if (isWin())
+      endGame(
+        true,
+        "All safe digits correct and bombs flagged with correct digits!"
+      );
   });
 
   function onMouseDownCell(e) {
@@ -1698,7 +1712,7 @@
       if (!raw) return;
       const cfg = JSON.parse(raw);
       PRESETS.custom = Object.assign({}, PRESETS.custom, cfg);
-    } catch { }
+    } catch {}
   }
   function saveCustomToLS() {
     localStorage.setItem(LS_KEY, JSON.stringify(PRESETS.custom));
@@ -1938,5 +1952,20 @@ bootstrapSteps: ${cfg.bootstrapSteps}`;
   // ========= Init =========
   loadCustomFromLS();
   updateConfigInputsUI();
+
+  // Theme init
+  const savedTheme = localStorage.getItem(THEME_KEY) || "dark";
+  applyTheme(savedTheme);
+
+  if (themeToggleBtn) {
+    themeToggleBtn.addEventListener("click", () => {
+      const current =
+        document.documentElement.getAttribute("data-theme") || "dark";
+      const next = current === "light" ? "dark" : "light";
+      localStorage.setItem(THEME_KEY, next);
+      applyTheme(next);
+    });
+  }
+
   newRun();
 })();
