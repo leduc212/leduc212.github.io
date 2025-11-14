@@ -38,7 +38,7 @@
     story: {
       lives: 0,
       bombRatio: 0.16,
-      minStartClues: 10,
+      minStartClues: 12,
       targetStartGivens: 40,
       maxAdjStart: 2,
       spreadRows: true,
@@ -47,19 +47,18 @@
       hintCols: 5,
       logicEnforcement: "hybrid",
       maxResidualUnknownCells: 0,
-
-      // Minesweeper friendliness
       clusterize: true,
       minClusters: 6,
       clusterSizeMin: 3,
       clusterSizeMax: 5,
       supportPasses: 2,
       bootstrapSteps: 2,
+      clueGivenRatio: 2 / 3,
     },
     normal: {
       lives: 0,
       bombRatio: 0.18,
-      minStartClues: 7,
+      minStartClues: 10,
       targetStartGivens: 36,
       maxAdjStart: 3,
       spreadRows: true,
@@ -68,18 +67,18 @@
       hintCols: 4,
       logicEnforcement: "sudoku_only",
       maxResidualUnknownCells: 2,
-
       clusterize: true,
       minClusters: 5,
       clusterSizeMin: 3,
       clusterSizeMax: 5,
       supportPasses: 2,
       bootstrapSteps: 1,
+      clueGivenRatio: 2 / 3,
     },
     hard: {
       lives: 0,
       bombRatio: 0.22,
-      minStartClues: 2,
+      minStartClues: 10,
       targetStartGivens: 32,
       maxAdjStart: 4,
       spreadRows: true,
@@ -88,13 +87,13 @@
       hintCols: 3,
       logicEnforcement: "sudoku_only",
       maxResidualUnknownCells: 4,
-
       clusterize: true,
       minClusters: 4,
       clusterSizeMin: 2,
       clusterSizeMax: 4,
       supportPasses: 2,
-      bootstrapSteps: 1, // still gives a tiny logical opening
+      bootstrapSteps: 1,
+      clueGivenRatio: 2 / 3,
     },
     custom: {
       lives: 0,
@@ -108,13 +107,13 @@
       hintCols: 3,
       logicEnforcement: "sudoku_only",
       maxResidualUnknownCells: 2,
-
       clusterize: true,
       minClusters: 5,
       clusterSizeMin: 3,
       clusterSizeMax: 5,
       supportPasses: 2,
       bootstrapSteps: 1,
+      clueGivenRatio: 2 / 3,
     },
   };
   const LS_KEY = "runic-custom-config-v2";
@@ -394,14 +393,19 @@
     const relaxedClues = clueCellsAll
       .filter((p) => p.adj > (cfg.maxAdjStart ?? 2))
       .sort((a, b) => a.adj - b.adj);
-    const cluePool = [...preferredClues];
-    for (const p of relaxedClues) {
-      if (cluePool.length >= minClues) break;
-      cluePool.push(p);
-    }
+
+    // 🔥 NEW: cluePool = all clue cells, low-adj first
+    const cluePool = [...preferredClues, ...relaxedClues];
+
+    // Shuffle pools
     shuffle(cluePool);
     shuffle(safeCells);
-
+    const totalClues = clueCellsAll.length;
+    const clueRatio = cfg.clueGivenRatio ?? 2 / 3;
+    const maxClueGivens = Math.min(
+      totalClues,
+      Math.max(minClues, Math.round(totalClues * clueRatio))
+    );
     const blockId = (r, c) => Math.floor(r / 3) * 3 + Math.floor(c / 3);
     const dist = (a, b) => Math.hypot(a.r - b.r, a.c - b.c);
 
@@ -416,11 +420,15 @@
       perCol = Array(SIDE).fill(0),
       perBlk = Array(9).fill(0);
     const picked = [];
-
+    let clueGivenCount = 0;
     // seed across distant blocks
     for (const b of shuffle([0, 2, 6, 8])) {
       const inBlk = (arr) => arr.filter((p) => blockId(p.r, p.c) === b);
-      let cand = inBlk(cluePool);
+
+      // Prefer clues in this block if we haven't hit the cap yet
+      let cand = inBlk(
+        cluePool.filter((p) => !(p.isClue && clueGivenCount >= maxClueGivens))
+      );
       if (!cand.length) cand = inBlk(safeCells);
       if (cand.length) {
         const p = cand[0];
@@ -428,6 +436,8 @@
         perRow[p.r]++;
         perCol[p.c]++;
         perBlk[blockId(p.r, p.c)]++;
+        if (p.isClue) clueGivenCount++;
+
         const rm = (arr, q) => {
           const i = arr.findIndex((x) => x.r === q.r && x.c === q.c);
           if (i >= 0) arr.splice(i, 1);
@@ -451,6 +461,7 @@
       const ROW_BIAS = 0.6,
         COL_BIAS = 0.6,
         BLK_BIAS = 0.8;
+
       while (taken < need && pool.length) {
         let bestIdx = -1,
           bestScore = -1;
@@ -459,12 +470,17 @@
             r = cand.r,
             c = cand.c,
             b = blockId(r, c);
+
+          // 🔥 NEW: stop picking clue tiles once we hit the global cap
+          if (cand.isClue && clueGivenCount >= maxClueGivens) continue;
+
           if (
             perRow[r] >= rowCap ||
             perCol[c] >= colCap ||
             perBlk[b] >= blockCap
           )
             continue;
+
           const dmin = picked.length
             ? Math.min(...picked.map((p) => dist(p, cand)))
             : 99;
@@ -473,10 +489,11 @@
             10 * dmin +
             (cand.isClue ? (preferClues ? 2 : 0) : 0) +
             (lowAdj ? 0.8 : 0) -
-            0.6 * perRow[r] -
-            0.6 * perCol[c] -
-            0.8 * perBlk[b] +
+            ROW_BIAS * perRow[r] -
+            COL_BIAS * perCol[c] -
+            BLK_BIAS * perBlk[b] +
             rand() * 0.05;
+
           if (score > bestScore) {
             bestScore = score;
             bestIdx = i;
@@ -494,6 +511,7 @@
         perRow[p.r]++;
         perCol[p.c]++;
         perBlk[blockId(p.r, p.c)]++;
+        if (p.isClue) clueGivenCount++; // 🔥 track clue givens
         taken++;
       }
       return taken;
@@ -926,7 +944,13 @@
       } else if (preview.kind === "note") {
         const pn = document.createElement("div");
         pn.className = "preview__note";
-        pn.textContent = String(preview.value);
+        pn.textContent = preview.value;
+
+        const icon = document.createElement("div");
+        icon.className = "preview__noteIcon";
+        icon.textContent = "✎";
+
+        div.appendChild(icon);
         div.appendChild(pn);
       }
 
@@ -987,7 +1011,9 @@
 
     // ========= COVERED CELLS =========
     div.classList.add("covered");
-
+    if (type === "clue") {
+      div.classList.add("clue"); // ADD THIS
+    }
     // Number preview on covered tiles (flag/note already handled above)
     if (hasPreview && preview.kind === "number") {
       div.classList.add("preview");

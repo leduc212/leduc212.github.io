@@ -717,12 +717,21 @@ details.block > summary {
   animation: flicker 0.9s ease-in-out infinite alternate;
 }
 
+/* Preview digit / note: centered, just softer */
 .cell.preview .preview__digit,
-.cell.preview .preview__note,
-.cell.preview .preview__flagIcon {
+.cell.preview .preview__note {
   opacity: 0.65;
-  /* soft look */
   filter: brightness(1.05);
+}
+
+/* Preview flag icon: small, top-right */
+.preview__flagIcon {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  font-size: 14px;
+  color: var(--flag);
+  opacity: 0.65;
 }
 
 /* Selection ring remains vivid */
@@ -768,6 +777,15 @@ details.block > summary {
 
 /* Slightly stronger ghost on editable tiles */
 .cell.entered.preview .preview__digit {
+  opacity: 0.75;
+}
+
+.preview__noteIcon {
+  position: absolute;
+  top: 5px;
+  right: 6px;
+  font-size: 13px;
+  color: var(--mark);
   opacity: 0.75;
 }
 
@@ -924,4 +942,10 @@ details.block > summary {
   background: #fff3d9;
   color: #5c3b17;
   border-color: rgba(150, 110, 50, 0.4);
+}
+
+/* Show clue border even when tile is covered (hidden editable clue tiles) */
+.cell.covered.clue {
+  outline: 2px solid #3a7aa6aa;
+  box-shadow: inset 0 0 0 1px #6fc8ff33;
 }
