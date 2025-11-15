@@ -1400,6 +1400,97 @@
   }
 
   // ========= Logic solvability evaluator =========
+  function hasAlternativeSudokuSolution() {
+    // Build a working grid: givens fixed, others empty (0)
+    const grid = Array.from({ length: SIDE }, () => Array(SIDE).fill(0));
+
+    for (let r = 0; r < SIDE; r++) {
+      for (let c = 0; c < SIDE; c++) {
+        if (!bombs[r][c] && given[r][c]) {
+          grid[r][c] = solution[r][c]; // lock givens to the real solution digit
+        }
+      }
+    }
+
+    const isClueCell = (r, c) => !bombs[r][c] && solution[r][c] === adj[r][c];
+
+    function canPlace(r, c, val) {
+      // Clue tiles must match their adjacency number
+      if (isClueCell(r, c) && val !== adj[r][c]) return false;
+
+      // Row
+      for (let cc = 0; cc < SIDE; cc++) {
+        if (cc !== c && grid[r][cc] === val) return false;
+      }
+      // Column
+      for (let rr = 0; rr < SIDE; rr++) {
+        if (rr !== r && grid[rr][c] === val) return false;
+      }
+      // Block
+      const r0 = Math.floor(r / 3) * 3;
+      const c0 = Math.floor(c / 3) * 3;
+      for (let rr = r0; rr < r0 + 3; rr++) {
+        for (let cc = c0; cc < c0 + 3; cc++) {
+          if ((rr !== r || cc !== c) && grid[rr][cc] === val) return false;
+        }
+      }
+      return true;
+    }
+
+    // List of non-given safe cells we can choose digits for
+    const cells = [];
+    for (let r = 0; r < SIDE; r++) {
+      for (let c = 0; c < SIDE; c++) {
+        if (!bombs[r][c] && !given[r][c]) {
+          cells.push([r, c]);
+        }
+      }
+    }
+
+    let foundAlt = false;
+
+    function backtrack(idx) {
+      if (foundAlt) return; // early exit if we already found an alternative
+
+      if (idx === cells.length) {
+        // Completed one candidate grid. Check if it's different from the true solution.
+        let diff = false;
+        for (let r = 0; r < SIDE && !diff; r++) {
+          for (let c = 0; c < SIDE; c++) {
+            if (!bombs[r][c] && grid[r][c] !== solution[r][c]) {
+              diff = true;
+              break;
+            }
+          }
+        }
+        if (diff) foundAlt = true;
+        return;
+      }
+
+      const [r, c] = cells[idx];
+
+      // If this cell is “forced” by givens/constraints to the same digit
+      // as the real solution, trying that first helps prune quickly.
+      const candidates = [];
+      for (let v = 1; v <= 9; v++) candidates.push(v);
+
+      // Try digits
+      for (let k = 0; k < candidates.length; k++) {
+        const v = candidates[k];
+        if (!canPlace(r, c, v)) continue;
+
+        grid[r][c] = v;
+        backtrack(idx + 1);
+        grid[r][c] = 0;
+
+        if (foundAlt) return;
+      }
+    }
+
+    backtrack(0);
+    return foundAlt;
+  }
+
   function evaluateLogicalSolvability(cfg) {
     const MODE = cfg.logicEnforcement ?? "sudoku_only";
     const knownRevealed = Array.from({ length: SIDE }, () =>
@@ -1980,6 +2071,10 @@ bootstrapSteps: ${cfg.bootstrapSteps}`;
             entry[r][c] = solution[r][c];
           }
         }
+      }
+
+      if (hasAlternativeSudokuSolution()) {
+        continue;
       }
 
       const evalRes = evaluateLogicalSolvability(cfg);
