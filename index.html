@@ -2,9 +2,17 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Sudoku × Minesweeper — Clue UI + Guide</title>
-    <link rel="stylesheet" href="styles.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SudoBOOM – Sudoku × Minesweeper</title>
+    <meta name="description" content="A strategic puzzle game combining Sudoku logic with Minesweeper deduction" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
+    
+    <!-- Open Graph tags -->
+    <meta property="og:title" content="SudoBOOM - Sudoku × Minesweeper" />
+    <meta property="og:description" content="Challenge your logic with this unique puzzle mashup!" />
+    <meta property="og:type" content="website" />
+    <script type="module" src="assets/index-BemQ8H1H.js"></script>
+    <link rel="stylesheet" href="assets/index-CTaaYV99.css">
   </head>
 
   <body>
@@ -15,7 +23,7 @@
       </div>
       <div class="seedRow">
         Seed:
-        <span id="seedDisplay">–</span>
+        <span id="seedDisplay">—</span>
         <input
           id="seedInput"
           type="text"
@@ -43,7 +51,7 @@
     </div>
 
     <div class="layout">
-      <!-- 🔔 Prominent notice bar above the board -->
+      <!-- Notice bar -->
       <div id="status" class="status">
         Rules: Flag mode → pick a number → Confirm to place a flag (no life
         loss). Remove Flag clears the flag &amp; its digit. Reveal mode → pick a
@@ -56,7 +64,7 @@
           id="board"
           class="board"
           role="grid"
-          aria-label="Runic Sudoku board"
+          aria-label="Sudoku Minesweeper board"
         ></div>
 
         <!-- Gutters for on-board hints -->
@@ -100,8 +108,8 @@
         <div class="row row--hint">
           <small id="asideHint" class="hint">
             Flag mode: pick a number → Confirm to place a numbered flag (no life
-            loss), or Confirm with no number to place a <b>blank flag</b>. “✖
-            Remove Flag” clears the flag &amp; its digit.
+            loss), or Confirm with no number to place a <b>blank flag</b>. "✖
+            Remove Flag" clears the flag &amp; its digit.
           </small>
         </div>
         <div class="row row--config">
@@ -111,7 +119,7 @@
       </aside>
     </div>
 
-    <!-- 📘 How to Play / Legend -->
+    <!-- How to Play / Legend -->
     <details class="block" id="guide">
       <summary>📘 How to Play, Rules &amp; Legend</summary>
       <div class="guide__content">
@@ -124,11 +132,11 @@
             <b>Two modes:</b>
             <ul>
               <li>
-                <b>Reveal mode</b> — pick a number, select a covered tile, hit
+                <b>Reveal mode</b> – pick a number, select a covered tile, hit
                 <b>Confirm</b>.
               </li>
               <li>
-                <b>Flag mode</b> — click <b>⚑ Flag</b>, pick a number, select a
+                <b>Flag mode</b> – click <b>⚑ Flag</b>, pick a number, select a
                 tile, then <b>Confirm</b>.
               </li>
             </ul>
@@ -158,7 +166,7 @@
       </div>
     </details>
 
-    <!-- ⚙️ Config -->
+    <!-- Config -->
     <details class="block" id="configPanel">
       <summary>⚙️ Configure Mode (Custom unlocks inputs)</summary>
       <div class="cfggrid">
@@ -249,6 +257,7 @@
       </div>
     </details>
 
-    <script src="script.js"></script>
+    <!-- Vite automatically injects this -->
+
   </body>
 </html>
