@@ -2,63 +2,419 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>SudoBOOM – Sudoku × Minesweeper</title>
-    <meta name="description" content="A strategic puzzle game combining Sudoku logic with Minesweeper deduction" />
+    <meta
+      name="description"
+      content="A strategic puzzle game combining Sudoku logic with Minesweeper deduction"
+    />
     <link rel="icon" type="image/svg+xml" href="/favicon.ico" />
-    
+
     <!-- Open Graph tags -->
     <meta property="og:title" content="SudoBOOM - Sudoku × Minesweeper" />
-    <meta property="og:description" content="Challenge your logic with this unique puzzle mashup!" />
+    <meta
+      property="og:description"
+      content="Challenge your logic with this unique puzzle mashup!"
+    />
     <meta property="og:type" content="website" />
-    <script type="module" crossorigin src="/assets/index-COpj4XTQ.js"></script>
-    <link rel="stylesheet" crossorigin href="/assets/index-Dt9kJipU.css">
+    <script type="module" crossorigin src="/assets/index-BxYEOSIs.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-D68lftLS.css">
   </head>
 
   <body>
+    <!-- 🎮 Top Control Bar -->
     <div class="topbar">
-      <div class="lives" id="lives"></div>
-      <div class="stats">
-        Bombs: <b id="bombsLeft">--</b> • Flags: <b id="flagsCnt">0</b>
+      <div class="topbar__left">
+        <h1 class="game-title">SudoBOOM</h1>
+        <div class="stats">
+          <span class="stat-item">
+            <span class="stat-label">Bombs:</span>
+            <b id="bombsLeft">--</b>
+          </span>
+          <span class="stat-separator">•</span>
+          <span class="stat-item">
+            <span class="stat-label">Flags:</span>
+            <b id="flagsCnt">0</b>
+          </span>
+        </div>
       </div>
-      <div class="seedRow">
-        Seed:
-        <span id="seedDisplay">—</span>
-        <input
-          id="seedInput"
-          type="text"
-          placeholder="leave blank for random"
-          autocomplete="off"
-        />
+
+      <div class="topbar__center">
+        <div class="seed-controls">
+          <label class="seed-label">Seed:</label>
+          <span id="seedDisplay" class="seed-display">—</span>
+          <input
+            id="seedInput"
+            type="text"
+            class="seed-input"
+            placeholder="random"
+            autocomplete="off"
+          />
+        </div>
       </div>
-      <div class="controls">
-        <select id="mode" title="Mode">
-          <option value="story" selected>Story</option>
+
+      <div class="topbar__right">
+        <select id="mode" class="mode-select" title="Game Mode">
+          <option value="story">Story</option>
           <option value="normal">Normal</option>
           <option value="hard">Hard</option>
           <option value="custom">Custom…</option>
         </select>
+
         <button
           id="themeToggle"
-          class="theme-toggle"
+          class="btn btn--icon"
           aria-label="Toggle light/dark theme"
+          title="Toggle Theme"
         >
           ☀️
         </button>
-        <button id="newRun">New Run</button>
-        <button id="reviewBtn" style="display: none">👁 Review Board</button>
+
+        <button id="newRun" class="btn btn--primary">New Run</button>
+
+        <button id="reviewBtn" class="btn btn--secondary" style="display: none">
+          👁 Review
+        </button>
       </div>
     </div>
 
+    <!-- 📘 Tutorial/Guide - RIGHT AFTER TOPBAR -->
+    <details class="block block--guide" id="guide">
+      <summary>📘 How to Play & Tutorial</summary>
+      <div class="guide__content">
+        <!-- Introduction -->
+        <section class="guide__section">
+          <h3>🎮 Welcome to SudoBOOM!</h3>
+          <p>
+            SudoBOOM is a unique puzzle game that combines the logical deduction
+            of
+            <strong>Sudoku</strong> with the strategic thinking of
+            <strong>Minesweeper</strong>. You'll use Sudoku rules to narrow down
+            possibilities while using Minesweeper-style clues to identify hidden
+            bombs. Every cell matters, and every clue is a piece of the puzzle!
+          </p>
+          <p>
+            This isn't just Sudoku with bombs—it's a whole new challenge that
+            rewards careful thinking and pattern recognition. Ready to dive in?
+          </p>
+        </section>
+
+        <!-- Understanding the Tiles -->
+        <section class="guide__section">
+          <h3>🔲 Understanding the Tiles</h3>
+
+          <div class="guide__tiles">
+            <div class="guide__tile-item">
+              <div class="tileDemo demo-given">
+                <span>5</span>
+              </div>
+              <div class="guide__tile-desc">
+                <strong>Starting Tiles (Given)</strong>
+                <p>
+                  Pre-filled and locked. These are your anchor points—they can't
+                  be changed or selected.
+                </p>
+              </div>
+            </div>
+
+            <div class="guide__tile-item">
+              <div class="tileDemo demo-clue">
+                <span>3</span>
+              </div>
+              <div class="guide__tile-desc">
+                <strong>Clue Tiles (Teal Border)</strong>
+                <p>
+                  Special safe tiles where the
+                  <strong>digit equals the number of bombs</strong>
+                  in the 8 surrounding neighbors. These are your Minesweeper
+                  clues!
+                </p>
+                <small class="guide__example">
+                  Example: If you see a "3", exactly 3 of its 8 neighbors are
+                  bombs.
+                </small>
+              </div>
+            </div>
+
+            <div class="guide__tile-item">
+              <div class="tileDemo demo-covered"></div>
+              <div class="guide__tile-desc">
+                <strong>Editable Tiles (Hidden)</strong>
+                <p>Covered tiles you need to solve. These can be:</p>
+                <ul>
+                  <li><strong>Safe digits</strong> – Normal Sudoku cells</li>
+                  <li>
+                    <strong>Hidden clue tiles</strong> – Clues you discover
+                    (shown with teal border when revealed)
+                  </li>
+                  <li>
+                    <strong>Bombs</strong> – Dangerous! Must be flagged, not
+                    revealed
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="guide__tile-item">
+              <div class="tileDemo demo-flag">
+                <span class="digit">7</span>
+              </div>
+              <div class="guide__tile-desc">
+                <strong>Flagged Tiles</strong>
+                <p>
+                  Mark suspected bombs with flags. You
+                  <strong>must write the correct Sudoku digit</strong>
+                  on each flag to win! Flags don't cost lives if you're
+                  wrong—only revealing bombs does.
+                </p>
+              </div>
+            </div>
+
+            <div class="guide__tile-item">
+              <div class="tileDemo demo-note">
+                <span class="markDigit">2/3</span>
+              </div>
+              <div class="guide__tile-desc">
+                <strong>Note Tiles (Yellow)</strong>
+                <p>
+                  Use notes to track possibilities. Write "2/3/5" to remember
+                  which digits could go in this cell. Notes are just for
+                  you—they don't affect the game.
+                </p>
+              </div>
+            </div>
+
+            <div class="guide__tile-item">
+              <div class="tileDemo demo-bomb"></div>
+              <div class="guide__tile-desc">
+                <strong>Bomb Tiles</strong>
+                <p>
+                  Revealed bombs mean instant loss! Use clues and Sudoku logic
+                  to identify and <strong>flag</strong> them before you
+                  accidentally reveal one.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Game Modes & Controls -->
+        <section class="guide__section">
+          <h3>🎛️ Controls & Interaction</h3>
+
+          <div class="guide__modes">
+            <div class="guide__mode-item">
+              <h4>🔢 Number Mode (Default)</h4>
+              <ol>
+                <li>Click a tile to select it (blue border)</li>
+                <li>Click a number (1-9) on the numpad</li>
+                <li>
+                  Click <strong>Confirm</strong> to reveal the tile with that
+                  digit
+                </li>
+              </ol>
+              <div class="guide__warning">
+                ⚠️ <strong>Warning:</strong> If you reveal a bomb, you lose
+                instantly!<br />
+                Wrong digits on safe tiles won't end the game, but they won't
+                help you win either.
+              </div>
+            </div>
+
+            <div class="guide__mode-item">
+              <h4>⚑ Flag Mode</h4>
+              <ol>
+                <li>Click <strong>⚑ Flag</strong> button to enter flag mode</li>
+                <li>Select a tile you think is a bomb</li>
+                <li>Pick the Sudoku digit that belongs in that cell (1-9)</li>
+                <li>Click <strong>Confirm</strong> to place the flag</li>
+              </ol>
+              <p>
+                <strong>Why digit matters:</strong> To win, you must correctly
+                flag all bombs <em>with their correct Sudoku digits</em>. Use
+                Sudoku logic to deduce what number the bomb would be!
+              </p>
+              <small
+                >💡 Tip: You can place a blank flag (no digit) if you're not
+                sure yet.</small
+              >
+            </div>
+
+            <div class="guide__mode-item">
+              <h4>✎ Note Mode</h4>
+              <ol>
+                <li>Click <strong>✎ Mark</strong> button to enter note mode</li>
+                <li>Select a tile</li>
+                <li>Click numbers and "/" to compose notes (e.g., "2/3/7")</li>
+                <li>Click <strong>Confirm</strong> to save the note</li>
+              </ol>
+              <p>
+                Use notes to track candidate digits or to mark cells you're
+                analyzing.
+              </p>
+            </div>
+          </div>
+
+          <div class="guide__shortcuts">
+            <h4>⌨️ Keyboard Shortcuts (Optional)</h4>
+            <ul>
+              <li><kbd>1</kbd>-<kbd>9</kbd> – Pick digit</li>
+              <li><kbd>Enter</kbd> or <kbd>Space</kbd> – Confirm</li>
+              <li><kbd>F</kbd> – Toggle Flag mode</li>
+              <li><kbd>M</kbd> – Toggle Mark (Note) mode</li>
+              <li><kbd>Arrows</kbd> – Navigate cells</li>
+              <li><kbd>Esc</kbd> – Unselect tile</li>
+              <li><kbd>Delete</kbd> – Remove flag/note</li>
+            </ul>
+          </div>
+        </section>
+
+        <!-- Row/Column Hints -->
+        <section class="guide__section">
+          <h3>💣 Row & Column Hints</h3>
+          <p>
+            Look for <strong>💣 [number]</strong> badges on the left and top of
+            the board. These show how many bombs are in that entire row or
+            column.
+          </p>
+
+          <div class="guide__example-box">
+            <strong>Example:</strong> If a row shows "💣 2", exactly 2 cells in
+            that row are bombs. <br /><br />
+            <strong>Strategy:</strong>
+            <ul>
+              <li>
+                If you've flagged 2 bombs in a row that shows "💣 2", all other
+                cells in that row are safe!
+              </li>
+              <li>
+                If a row has only 2 unknown cells and shows "💣 2", both must be
+                bombs.
+              </li>
+              <li>
+                Combine this with Sudoku logic to narrow down bomb locations.
+              </li>
+            </ul>
+          </div>
+
+          <p>
+            Hover over the row/col badges to highlight that line. Use them to
+            cross-reference with clue tiles for powerful deductions!
+          </p>
+        </section>
+
+        <!-- Win & Lose Conditions -->
+        <section class="guide__section">
+          <h3>🏆 Win & Lose Conditions</h3>
+
+          <div class="guide__conditions">
+            <div class="guide__condition guide__condition--win">
+              <h4>✅ You Win When:</h4>
+              <ol>
+                <li>
+                  <strong>All safe tiles</strong> are revealed with correct
+                  digits (following Sudoku rules)
+                </li>
+                <li><strong>All bombs</strong> are flagged</li>
+                <li>
+                  <strong>Each flag</strong> has the correct Sudoku digit
+                  written on it
+                </li>
+              </ol>
+              <p class="guide__tip">
+                💡 <strong>Key Insight:</strong> You can't just randomly flag
+                everything—you must solve the Sudoku to know what digit each
+                bomb would have been!
+              </p>
+            </div>
+
+            <div class="guide__condition guide__condition--lose">
+              <h4>❌ You Lose If:</h4>
+              <ul>
+                <li>You reveal a bomb tile in Number mode (instant loss)</li>
+              </ul>
+              <p class="guide__note">
+                📝 <strong>Note:</strong> Wrong digits on safe tiles won't end
+                the game immediately, but they'll prevent you from winning.
+                Flags are safe—use them liberally!
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Strategy Tips -->
+        <section class="guide__section">
+          <h3>🧠 Strategy Tips</h3>
+          <ul class="guide__tips">
+            <li>
+              <strong>Start with clue tiles:</strong> Revealed clues (teal
+              border) are your safest starting points.
+            </li>
+            <li>
+              <strong>Use Sudoku logic first:</strong> Narrow down which digits
+              can go where using rows/columns/blocks.
+            </li>
+            <li>
+              <strong>Cross-reference clues:</strong> If two clue tiles share
+              neighbors, compare their counts.
+            </li>
+            <li>
+              <strong>Flag early, flag often:</strong> It's safer to flag a
+              suspected bomb than to guess and reveal it.
+            </li>
+            <li>
+              <strong>Use notes liberally:</strong> Track candidate digits for
+              complex cells.
+            </li>
+            <li>
+              <strong>Check row/col totals:</strong> If you've found all bombs
+              in a row, the rest are safe!
+            </li>
+            <li>
+              <strong>Hidden clues are gold:</strong> When you reveal a tile
+              that turns out to be a clue (teal border), it instantly tells you
+              about 8 neighbors.
+            </li>
+          </ul>
+        </section>
+
+        <!-- Visual Legend -->
+        <section class="guide__section">
+          <h3>🎨 Visual Legend</h3>
+          <div class="legend">
+            <div class="tileDemo demo-covered" title="Covered tile"></div>
+            <div class="tileDemo demo-normal" title="Revealed normal digit">
+              <span>5</span>
+            </div>
+            <div class="tileDemo demo-clue" title="Revealed clue digit (teal)">
+              <span>3</span>
+            </div>
+            <div class="tileDemo demo-flag" title="Flag with digit">
+              <span class="digit">7</span>
+            </div>
+            <div class="tileDemo demo-note" title="Note tile">
+              <span class="markDigit">2/3</span>
+            </div>
+            <div class="tileDemo demo-bomb" title="Revealed bomb"></div>
+            <div class="tileDemo demo-given" title="Starting given tile">
+              <span>8</span>
+            </div>
+          </div>
+        </section>
+      </div>
+    </details>
+
+    <!-- Lives indicator (hidden for now) -->
+    <div class="lives" id="lives" style="display: none"></div>
+
+    <!-- Main game layout -->
     <div class="layout">
-      <!-- Notice bar -->
+      <!-- Status bar -->
       <div id="status" class="status">
-        Rules: Flag mode → pick a number → Confirm to place a flag (no life
-        loss). Remove Flag clears the flag &amp; its digit. Reveal mode → pick a
-        number → Confirm to reveal; wrong digit costs a life; revealing a bomb
-        loses instantly.
+        Welcome! Select a mode and click "New Run" to start playing.
       </div>
 
+      <!-- Board wrapper -->
       <div class="boardWrap">
         <div
           id="board"
@@ -72,102 +428,57 @@
         <div id="colHintsOverlay" class="colHints"></div>
       </div>
 
+      <!-- Control panel -->
       <aside class="panel panel--aside">
-        <h3>Number</h3>
+        <h3>Number Pad</h3>
         <div class="numpad" id="numpad"></div>
-        <div class="row">
-          <button id="confirm" class="confirm" title="Confirm on selected tile">
+
+        <div class="control-buttons">
+          <button id="confirm" class="btn btn--confirm" title="Confirm action">
             Confirm
           </button>
-          <button id="flagBtn" title="Toggle flag mode">⚑ Flag</button>
-          <button
-            id="markBtn"
-            class="markBtn"
-            title="Toggle mark mode (yellow)"
-          >
+          <button id="flagBtn" class="btn btn--flag" title="Toggle flag mode">
+            ⚑ Flag
+          </button>
+          <button id="markBtn" class="btn btn--mark" title="Toggle mark mode">
             ✎ Mark
           </button>
+        </div>
+
+        <div class="control-buttons control-buttons--remove">
           <button
             id="removeFlagBtn"
-            class="removeFlag"
-            title="Remove flag on selected tile"
+            class="btn btn--remove"
+            title="Remove flag"
             disabled
           >
             ✖ Remove Flag
           </button>
           <button
             id="removeMarkBtn"
-            class="removeMark"
-            title="Remove mark on selected tile"
+            class="btn btn--remove"
+            title="Remove mark"
             disabled
           >
             ✖ Remove Mark
           </button>
         </div>
 
-        <div class="row row--hint">
+        <div class="hint-text">
           <small id="asideHint" class="hint">
-            Flag mode: pick a number → Confirm to place a numbered flag (no life
-            loss), or Confirm with no number to place a <b>blank flag</b>. "✖
-            Remove Flag" clears the flag &amp; its digit.
+            Select a tile and pick a number to start playing.
           </small>
         </div>
-        <div class="row row--config">
-          <h3>Active Config</h3>
+
+        <details class="config-details">
+          <summary>⚙️ Active Config</summary>
           <div id="activeConfig" class="kv"></div>
-        </div>
+        </details>
       </aside>
     </div>
 
-    <!-- How to Play / Legend -->
-    <details class="block" id="guide">
-      <summary>📘 How to Play, Rules &amp; Legend</summary>
-      <div class="guide__content">
-        <ol>
-          <li>
-            <b>Goal:</b> Flag <i>all bombs</i> and reveal all safe digits.
-            Follow <b>Sudoku rules</b> (1–9 in each row/column/3×3 block).
-          </li>
-          <li>
-            <b>Two modes:</b>
-            <ul>
-              <li>
-                <b>Reveal mode</b> – pick a number, select a covered tile, hit
-                <b>Confirm</b>.
-              </li>
-              <li>
-                <b>Flag mode</b> – click <b>⚑ Flag</b>, pick a number, select a
-                tile, then <b>Confirm</b>.
-              </li>
-            </ul>
-          </li>
-          <li>
-            <b>Clue tiles</b> are safe digits where the number also equals the
-            number of bombs in the 8 neighbors.
-          </li>
-          <li>
-            <b>Lives &amp; Endings:</b> Wrong reveal digits cost 1 life.
-            Revealing a bomb loses instantly.
-          </li>
-        </ol>
-        <div class="legend">
-          <div class="tileDemo demo-covered" title="Covered tile"></div>
-          <div class="tileDemo demo-normal" title="Revealed normal digit">
-            <span>5</span>
-          </div>
-          <div class="tileDemo demo-clue" title="Revealed clue digit (teal)">
-            <span>3</span>
-          </div>
-          <div class="tileDemo demo-flag" title="Flag with digit">
-            <span class="digit">7</span>
-          </div>
-          <div class="tileDemo demo-bomb" title="Revealed bomb"></div>
-        </div>
-      </div>
-    </details>
-
-    <!-- Config -->
-    <details class="block" id="configPanel">
+    <!-- Config Panel -->
+    <details class="block block--config" id="configPanel">
       <summary>⚙️ Configure Mode (Custom unlocks inputs)</summary>
       <div class="cfggrid">
         <div class="cfgitem">
@@ -256,7 +567,6 @@
         </div>
       </div>
     </details>
-
-    <!-- Vite automatically injects this -->
+
   </body>
 </html>
